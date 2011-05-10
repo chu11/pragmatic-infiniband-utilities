@@ -12,6 +12,7 @@ ACLOCAL_AMFLAGS = -I config
 AM_CFLAGS = -Wall $(DBGFLAGS)
 
 sbin_PROGRAMS = src/simple_rdma \
+		src/simple_benchmark \
 					src/rdma_cm_query \
 					src/slurm_topology \
 					src/ibgraphfabric
@@ -61,6 +62,10 @@ src_slurm_topology_LDFLAGS = -losmcomp -libmad -libnetdisc $(LIBGENDERS)
 
 src_ibgraphfabric_SOURCES = src/ibgraphfabric.c src/hostlist.c src/hostlist.h
 src_ibgraphfabric_LDFLAGS = -losmcomp -libmad -libnetdisc
+
+src_simple_benchmark_SOURCES = src/simple_benchmark.c
+src_simple_benchmark_CFLAGS = -DOSM_VENDOR_INTF_OPENIB
+src_simple_benchmark_LDFLAGS = -losmvendor -lopensm -losmcomp -libmad -lrdmacm
 
 EXTRA_DIST = \
 	META \
