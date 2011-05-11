@@ -63,7 +63,9 @@ src_slurm_topology_LDFLAGS = -losmcomp -libmad -libnetdisc $(LIBGENDERS)
 src_ibgraphfabric_SOURCES = src/ibgraphfabric.c src/hostlist.c src/hostlist.h
 src_ibgraphfabric_LDFLAGS = -losmcomp -libmad -libnetdisc
 
-src_simple_benchmark_SOURCES = src/simple_benchmark.c
+src_simple_benchmark_SOURCES = src/simple_benchmark.c \
+				src/simple_benchmark_common.c \
+				src/simple_benchmark_tcp.c
 src_simple_benchmark_CFLAGS = -DOSM_VENDOR_INTF_OPENIB
 src_simple_benchmark_LDFLAGS = -losmvendor -lopensm -losmcomp -libmad -lrdmacm
 
