@@ -29,7 +29,10 @@
 #include <string.h>
 #include <stdint.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <arpa/inet.h>
 #include <assert.h>
 
 #include "simple_benchmark.h"
@@ -38,6 +41,9 @@
 #define GETHOSTBYNAME_AUX_BUFLEN      1024
 
 extern char *host;
+extern unsigned int blocksize;
+extern unsigned int transfersize;
+extern uint16_t port;
 
 void
 gethostbyname_r_common (struct hostent *hent)
@@ -60,6 +66,86 @@ gethostbyname_r_common (struct hostent *hent)
       fprintf (stderr, "gethostbyname_r: %s", hstrerror (tmpherrno));
       exit (1);
     }
+}
+
+void
+calc_bufsize (size_t *bufsize)
+{
+  assert (bufsize);
+
+  (*bufsize) = (uint64_t)blocksize * KILOBYTE;
+}
+
+uint8_t *
+create_buf (void)
+{
+  uint8_t *buf;
+  size_t s;
+
+  calc_bufsize (&s);
+
+  if (!(buf = (uint8_t *)malloc (s)))
+    {
+      perror ("malloc");
+      exit (1);
+    }
+
+  memset (buf, BLOCK_PATTERN, s);
+
+  return buf;
+}
+
+void
+calc_blocks (unsigned int *blocks)
+{
+  size_t s;
+
+  assert (blocks);
+
+  calc_bufsize (&s);
+
+  (*blocks) = ((uint64_t)transfersize * MEGABYTE) / s;
+  if (((uint64_t)transfersize * MEGABYTE) % s)
+    (*blocks)++;
+}
+
+void
+setup_client_serveraddr (struct sockaddr_in *serveraddr)
+{
+  struct hostent hent;
+
+  assert (serveraddr);
+
+  gethostbyname_r_common (&hent);
+
+  memset (serveraddr, '\0', sizeof (*serveraddr));
+  serveraddr->sin_family = AF_INET;
+  serveraddr->sin_addr = *(struct in_addr *)hent.h_addr;
+  serveraddr->sin_port = htons (port);
+}
+
+void
+setup_server_serveraddr (struct sockaddr_in *serveraddr)
+{
+  struct hostent hent;
+
+  assert (serveraddr);
+
+  gethostbyname_r_common (&hent);
+
+  memset (serveraddr, '\0', sizeof (*serveraddr));
+  serveraddr->sin_family = AF_INET;
+  if (host)
+    {
+      struct hostent hent;
+
+      gethostbyname_r_common (&hent);
+
+      serveraddr->sin_addr = *(struct in_addr *)hent.h_addr;
+    }
+  else
+    serveraddr->sin_addr.s_addr = htonl (INADDR_ANY);
+  serveraddr->sin_port = htons (port);
 }
 
 void

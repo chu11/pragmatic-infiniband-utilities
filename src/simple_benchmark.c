@@ -34,12 +34,13 @@
 
 #include "simple_benchmark.h"
 #include "simple_benchmark_tcp.h"
+#include "simple_benchmark_udp.h"
 
 /* Notes:
  *
  * This benchmark tool is predominantly an investigation on all the
  * Infiniband APIs, and how they compare (performance wise) to
- * traditional TCP vs UDP.
+ * traditional TCP vs UDP (done over IPoIB).
  *
  * Feel free to critique implementation for increased performance.  I
  * did not pay particular close attention to it, choosing instead to
@@ -69,11 +70,6 @@ uint16_t port = PORT_DEFAULT;
 unsigned int verbose = 0;
 
 static void
-client_udp (void)
-{
-}
-
-static void
 client(void)
 {
   switch (benchmark_test_type)
@@ -88,11 +84,6 @@ client(void)
       fprintf (stderr, "invalid benchmark_test_type: %u\n", benchmark_test_type);
       exit (1);
     }
-}
-
-static void
-server_udp (void)
-{
 }
 
 static void

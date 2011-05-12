@@ -65,7 +65,8 @@ src_ibgraphfabric_LDFLAGS = -losmcomp -libmad -libnetdisc
 
 src_simple_benchmark_SOURCES = src/simple_benchmark.c \
 				src/simple_benchmark_common.c \
-				src/simple_benchmark_tcp.c
+				src/simple_benchmark_tcp.c \
+				src/simple_benchmark_udp.c
 src_simple_benchmark_CFLAGS = -DOSM_VENDOR_INTF_OPENIB
 src_simple_benchmark_LDFLAGS = -losmvendor -lopensm -losmcomp -libmad -lrdmacm
 

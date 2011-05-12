@@ -24,27 +24,11 @@
  *
  */
 
-#ifndef _SIMPLE_BENCHMARK_COMMON_H
-#define _SIMPLE_BENCHMARK_COMMON_H
+#ifndef _SIMPLE_BENCHMARK_UDP_H
+#define _SIMPLE_BENCHMARK_UDP_H
 
-#include <stdint.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <sys/time.h>
-#include <sys/types.h>
+void client_udp (void);
 
-void gethostbyname_r_common (struct hostent *hent);
+void server_udp (void);
 
-void calc_bufsize (size_t *bufsize);
-
-uint8_t *create_buf (void);
-
-void calc_blocks (unsigned int *blocks);
-
-void setup_client_serveraddr (struct sockaddr_in *serveraddr);
-
-void setup_server_serveraddr (struct sockaddr_in *serveraddr);
-
-void elapsed_time_output (struct timeval *starttime, struct timeval *endtime);
-
-#endif /* _SIMPLE_BENCHMARK_COMMON_H */
+#endif /* _SIMPLE_BENCHMARK_UDP_H */

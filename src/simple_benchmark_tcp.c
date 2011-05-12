@@ -32,6 +32,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
@@ -44,13 +45,7 @@
 #include "simple_benchmark_common.h"
 #include "simple_benchmark_tcp.h"
 
-extern benchmark_run_type_t benchmark_run_type;
-extern benchmark_test_type_t benchmark_test_type;
-extern char *host;
-extern unsigned int blocksize;
-extern unsigned int transfersize;
 extern unsigned int sessiontimeout;
-extern uint16_t port;
 extern unsigned int verbose;
 
 static void
@@ -69,6 +64,7 @@ client_tcp (void)
   char *buf = NULL;
   size_t writesize;
   struct hostent hent;
+  int opt, optlen;
   int fd;
 
   if ((fd = socket (AF_INET, SOCK_STREAM, 0)) < 0)
@@ -77,12 +73,7 @@ client_tcp (void)
       exit(1);
     }
   
-  gethostbyname_r_common (&hent);
-
-  memset (&serveraddr, '\0', sizeof (serveraddr));
-  serveraddr.sin_family = AF_INET;
-  serveraddr.sin_addr = *(struct in_addr *)hent.h_addr;
-  serveraddr.sin_port = htons (port);
+  setup_client_serveraddr (&serveraddr);
 
   if (connect (fd, (struct sockaddr *)&serveraddr, sizeof (serveraddr)) < 0)
     {
@@ -90,25 +81,36 @@ client_tcp (void)
       exit (1);
     }
 
-  writesize = (uint64_t)blocksize * KILOBYTE;
+  calc_bufsize (&writesize);
 
-  if (!(buf = (uint8_t *)malloc (writesize)))
-    {
-      perror ("malloc");
-      exit (1);
-    }
+  buf = create_buf ();
 
-  memset (buf, BLOCK_PATTERN, writesize);
-
-  blocks_to_write = ((uint64_t)transfersize * MEGABYTE) / writesize;
-  if (((uint64_t)transfersize * MEGABYTE) % writesize)
-    blocks_to_write++;
+  calc_blocks (&blocks_to_write);
 
   if (signal(SIGPIPE, _client_tcp_sigpipe) == SIG_ERR)
     {
       perror ("signal");
       exit (1);
     }
+
+#if 0
+  opt = 1;
+  optlen = sizeof (opt);
+  if (setsockopt (fd, IPPROTO_TCP, TCP_NODELAY, &opt, optlen) < 0)
+    {
+      perror ("setsockopt");
+      exit (1);
+    }
+
+  opt = 0;
+  optlen = sizeof (opt);
+  if (getsockopt (fd, IPPROTO_TCP, TCP_NODELAY, &opt, &optlen) < 0)
+    {
+      perror ("getsockopt");
+      exit (1);
+    }
+
+#endif
 
   gettimeofday (&starttime, NULL);
 
@@ -119,28 +121,19 @@ client_tcp (void)
       while (writelentotal < writesize)
 	{
 	  fd_set writefds;
-	  struct timeval timeout;
 	  ssize_t writelen;
 	  int ret;
 
 	  FD_ZERO(&writefds);
 	  FD_SET(fd, &writefds);
 
-	  timeout.tv_sec = sessiontimeout / MILLISECOND_IN_SECOND;
-	  timeout.tv_usec = (sessiontimeout % MILLISECOND_IN_SECOND) * MICROSECOND_IN_MILLISECOND;
-
-	  if ((ret = select (fd + 1, NULL, &writefds, NULL, &timeout)) < 0)
+	  if ((ret = select (fd + 1, NULL, &writefds, NULL, NULL)) < 0)
 	    {
 	      perror ("select");
 	      exit (1);
 	    }
 
-	  if (!ret)
-	    {
-	      printf ("Client session timeout\n");
-	      return;
-	    }
-
+	  /* shouldn't ever be true */
 	  if (!FD_ISSET (fd, &writefds))
 	    {
 	      if (verbose)
@@ -180,18 +173,12 @@ client_tcp (void)
 	printf ("Wrote block %u of size %u\n", blocks_written, writesize);
     }
 
-#if 0
-  if (verifydata)
-    {
-    }
-#endif
-
   printf ("Wrote %u blocks, each %llu bytes\n",
 	  blocks_written,
-	  (uint64_t)blocksize * KILOBYTE);
+	  writesize);
 
   printf ("Total written %llu bytes\n",
-	  (uint64_t)blocks_written * blocksize * KILOBYTE);
+	  (uint64_t)blocks_written * writesize);
 
   gettimeofday (&endtime, NULL);
 
@@ -216,17 +203,11 @@ _server_tcp_receive (int transferfd)
 
   assert (transferfd);
 
-  readsize = (uint64_t)blocksize * KILOBYTE;
+  calc_bufsize (&readsize);
 
-  if (!(buf = (uint8_t *)malloc (readsize)))
-    {
-      perror ("malloc");
-      exit (1);
-    }
+  buf = create_buf ();
 
-  blocks_to_read = ((uint64_t)transfersize * MEGABYTE) / readsize;
-  if (((uint64_t)transfersize * MEGABYTE) % readsize)
-    blocks_to_read++;
+  calc_blocks (&blocks_to_read);
 
   while (blocks_read < blocks_to_read)
     {
@@ -257,6 +238,7 @@ _server_tcp_receive (int transferfd)
 	      return;
 	    }
 
+	  /* shouldn't ever be true */
 	  if (!FD_ISSET (transferfd, &readfds))
 	    {
 	      if (verbose)
@@ -297,18 +279,12 @@ _server_tcp_receive (int transferfd)
 	printf ("Received block %u of size %u\n", blocks_read, readsize);
     }
 
-#if 0
-  if (verifydata)
-    {
-    }
-#endif
-
   printf ("Received %u blocks, each %llu bytes\n",
 	  blocks_read,
-	  (uint64_t)blocksize * KILOBYTE);
+	  readsize);
 
   printf ("Total received %llu bytes\n",
-	  (uint64_t)blocks_read * blocksize * KILOBYTE);
+	  (uint64_t)blocks_read * readsize);
 
   free (buf);
 }
@@ -335,19 +311,7 @@ server_tcp (void)
       exit (1);
     }
 
-  memset (&serveraddr, '\0', sizeof (serveraddr));
-  serveraddr.sin_family = AF_INET;
-  if (host)
-    {
-      struct hostent hent;
-
-      gethostbyname_r_common (&hent);
-
-      serveraddr.sin_addr = *(struct in_addr *)hent.h_addr;
-    }
-  else
-    serveraddr.sin_addr.s_addr = htonl (INADDR_ANY);
-  serveraddr.sin_port = htons (port);
+  setup_server_serveraddr (&serveraddr);
 
   if (bind (listenfd, (struct sockaddr *)&serveraddr, sizeof (serveraddr)) < 0)
     {
