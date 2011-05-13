@@ -27,6 +27,23 @@
 #ifndef _SIMPLE_BENCHMARK_H
 #define _SIMPLE_BENCHMARK_H
 
+#define CLIENT_ARGVAL                'C'
+#define SERVER_ARGVAL                'S'
+#define TCP_ARGVAL                   'T'
+#define TCPNODELAY_ARGVAL            128
+#define UDP_ARGVAL                   'U'
+#define HOST_ARGVAL                  'H'
+#define BLOCKSIZE_ARGVAL             'b'
+#define TRANSFERSIZE_ARGVAL          't'
+#define RETRANSMISSIONTIMEOUT_ARGVAL 'r'
+#define SESSIONTIMEOUT_ARGVAL        's'
+#define VERIFYDATA_ARGVAL            129
+#define PORT_ARGVAL                  'p'
+#define VERBOSE_ARGVAL               'v'
+#define HELP_ARGVAL                  'h'
+
+#define GETOPTARGS  "CSTUH:b:t:r:s:p:vh";
+
 #define BLOCKSIZE_DEFAULT             4
 #define TRANSFERSIZE_DEFAULT          4096
 #define RETRANSMISSIONTIMEOUT_DEFAULT 1000
@@ -53,6 +70,7 @@ typedef enum {
 typedef enum {
   BENCHMARK_TEST_TYPE_UNINITIALIZED,
   BENCHMARK_TEST_TYPE_TCP,
+  BENCHMARK_TEST_TYPE_TCPNODELAY,
   BENCHMARK_TEST_TYPE_UDP,
 } benchmark_test_type_t;
 

@@ -70,48 +70,15 @@ uint16_t port = PORT_DEFAULT;
 unsigned int verbose = 0;
 
 static void
-client(void)
-{
-  switch (benchmark_test_type)
-    {
-    case BENCHMARK_TEST_TYPE_TCP:
-      client_tcp ();
-      break;
-    case BENCHMARK_TEST_TYPE_UDP:
-      client_udp ();
-      break;
-    default:
-      fprintf (stderr, "invalid benchmark_test_type: %u\n", benchmark_test_type);
-      exit (1);
-    }
-}
-
-static void
-server (void)
-{
-  switch (benchmark_test_type)
-    {
-    case BENCHMARK_TEST_TYPE_TCP:
-      server_tcp ();
-      break;
-    case BENCHMARK_TEST_TYPE_UDP:
-      server_udp ();
-      break;
-    default:
-      fprintf (stderr, "invalid benchmark_test_type: %u\n", benchmark_test_type);
-      exit (1);
-    }
-}
-
-static void
 usage (const char *progname)
 {
   fprintf (stderr,
-	   "Usage: simple_benchmark --client|--server --tcp|--udp\n"
+	   "Usage: simple_benchmark [OPTIONS] --client|--server TEST_TYPE\n"
 	   "\n"
 	   "Test Types:\n"
-	   "--tcp   basic TCP data streaming\n"
-	   "--udp   basic UDP send/ack data transfer\n"
+	   "--tcp        basic TCP data streaming\n"
+	   "--tcpnodelay basic TCP data streaming, but disable Nagle\n"
+	   "--udp        basic UDP send/ack data transfer\n"
 	   "\n"
 	   "Options:\n"
 	   " --host                   specify host to send to, required for client side\n"
@@ -140,51 +107,55 @@ main (int argc, char *argv[])
 {
   static const struct option long_opts[] =
     {
-      {"client", 0, 0, 'C'},
-      {"server", 0, 0, 'S'},
-      {"tcp", 0, 0, 'T'},
-      {"udp", 0, 0, 'U'},
-      {"host", 1, NULL, 'H'},
-      {"blocksize", 1, NULL, 'b'},
-      {"transfersize", 1, NULL, 't'},
-      {"retransmissionteimout", 1, NULL, 'r'},
-      {"sessionteimout", 1, NULL, 's'},
+      {"client", 0, 0, CLIENT_ARGVAL},
+      {"server", 0, 0, SERVER_ARGVAL},
+      {"tcp", 0, 0, TCP_ARGVAL},
+      {"tcpnodelay", 0, 0, TCPNODELAY_ARGVAL},
+      {"udp", 0, 0, UDP_ARGVAL},
+      {"host", 1, NULL, HOST_ARGVAL},
+      {"blocksize", 1, NULL, BLOCKSIZE_ARGVAL},
+      {"transfersize", 1, NULL, TRANSFERSIZE_ARGVAL},
+      {"retransmissionteimout", 1, NULL, RETRANSMISSIONTIMEOUT_ARGVAL},
+      {"sessionteimout", 1, NULL, SESSIONTIMEOUT_ARGVAL},
 #if 0
-      {"verifydata", 0, 0, 128},
+      {"verifydata", 0, 0, VERIFYDATA_ARGVAL},
 #endif
-      {"port", 1, NULL, 'p'},
-      {"verbose", 0, 0, 'v'},
-      {"help", 0, 0, 'h'},
+      {"port", 1, NULL, PORT_ARGVAL},
+      {"verbose", 0, 0, VERBOSE_ARGVAL},
+      {"help", 0, 0, HELP_ARGVAL},
       {NULL, 0, 0, 0}
     };
-  const char *stropts = "CSTUH:b:t:r:s:p:vh";
+  const char *stropts = GETOPTARGS;
   char *endptr;
-  char ch;
+  int ch;
 
   while ((ch = getopt_long (argc, argv, stropts, long_opts, NULL)) != -1)
     {
       switch (ch)
 	{
-	case 'C':
+	case CLIENT_ARGVAL:
 	  benchmark_run_type = BENCHMARK_RUN_TYPE_CLIENT;
 	  break;
-	case 'S':
+	case SERVER_ARGVAL:
 	  benchmark_run_type = BENCHMARK_RUN_TYPE_SERVER;
 	  break;
-	case 'T':
+	case TCP_ARGVAL:
 	  benchmark_test_type = BENCHMARK_TEST_TYPE_TCP;
 	  break;
-	case 'U':
+	case TCPNODELAY_ARGVAL:
+	  benchmark_test_type = BENCHMARK_TEST_TYPE_TCPNODELAY;
+	  break;
+	case UDP_ARGVAL:
 	  benchmark_test_type = BENCHMARK_TEST_TYPE_UDP;
 	  break;
-	case 'H':
+	case HOST_ARGVAL:
 	  if (!(host = strdup (optarg)))
 	    {
 	      perror ("strdup");
 	      exit (1);
 	    }
 	  break;
-	case 'b':
+	case BLOCKSIZE_ARGVAL:
 	  blocksize = strtoul (optarg, &endptr, 0);
 	  if (errno
               || endptr[0] != '\0'
@@ -194,7 +165,7 @@ main (int argc, char *argv[])
 	      exit (1);
 	    }
 	  break;
-	case 't':
+	case TRANSFERSIZE_ARGVAL:
 	  transfersize = strtoul (optarg, &endptr, 0);
 	  if (errno
               || endptr[0] != '\0'
@@ -204,7 +175,7 @@ main (int argc, char *argv[])
 	      exit (1);
 	    }
 	  break;
-	case 'r':
+	case RETRANSMISSIONTIMEOUT_ARGVAL:
 	  retransmissiontimeout = strtoul (optarg, &endptr, 0);
 	  if (errno
               || endptr[0] != '\0'
@@ -214,7 +185,7 @@ main (int argc, char *argv[])
 	      exit (1);
 	    }
 	  break;
-	case 's':
+	case SESSIONTIMEOUT_ARGVAL:
 	  sessiontimeout = strtoul (optarg, &endptr, 0);
 	  if (errno
               || endptr[0] != '\0'
@@ -225,11 +196,11 @@ main (int argc, char *argv[])
 	    }
 	  break;
 #if 0
-	case 128:
+	case VERIFYDATA_ARGVAL:
 	  verifydata = 1;
 	  break;
 #endif
-	case 'p':
+	case PORT_ARGVAL:
 	  port = strtoul (optarg, &endptr, 0);
 	  if (errno
               || endptr[0] != '\0'
@@ -239,10 +210,10 @@ main (int argc, char *argv[])
 	      exit (1);
 	    }
 	  break;
-	case 'v':
+	case VERBOSE_ARGVAL:
 	  verbose++;
 	  break;
-	case 'h':
+	case HELP_ARGVAL:
 	default:
 	  usage (argv[0]);
 	}
@@ -250,9 +221,17 @@ main (int argc, char *argv[])
 
   /* Sanity check inputs */
   
-  if (benchmark_test_type == BENCHMARK_TEST_TYPE_UNINITIALIZED
-      || benchmark_run_type == BENCHMARK_RUN_TYPE_UNINITIALIZED)
-    usage (argv[0]);
+  if (benchmark_run_type == BENCHMARK_RUN_TYPE_UNINITIALIZED)
+    {
+      fprintf (stderr, "Must specify --client or --server\n");
+      usage (argv[0]);
+    }
+
+  if (benchmark_test_type == BENCHMARK_TEST_TYPE_UNINITIALIZED)
+    {
+      fprintf (stderr, "Must specify a test type\n");
+      usage (argv[0]);
+    }
   
   /* Modify inputs appropriately to fix rounding/corner situations */
 
@@ -275,10 +254,26 @@ main (int argc, char *argv[])
 	  fprintf (stderr, "must specify host\n");
 	  exit (1);
 	}
-
-      client ();
     }
-  else
-    server ();
+
+  switch (benchmark_test_type)
+    {
+    case BENCHMARK_TEST_TYPE_TCP:
+    case BENCHMARK_TEST_TYPE_TCPNODELAY:
+      if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
+	client_tcp ();
+      else
+	server_tcp ();
+      break;
+    case BENCHMARK_TEST_TYPE_UDP:
+      if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
+	client_udp ();
+      else
+	server_udp ();
+      break;
+    default:
+      fprintf (stderr, "invalid benchmark_test_type: %u\n", benchmark_test_type);
+      exit (1);
+    }
 }
 

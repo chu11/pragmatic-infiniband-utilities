@@ -45,6 +45,7 @@
 #include "simple_benchmark_common.h"
 #include "simple_benchmark_tcp.h"
 
+extern benchmark_test_type_t benchmark_test_type;
 extern unsigned int sessiontimeout;
 extern unsigned int verbose;
 
@@ -64,7 +65,6 @@ client_tcp (void)
   char *buf = NULL;
   size_t writesize;
   struct hostent hent;
-  int opt, optlen;
   int fd;
 
   if ((fd = socket (AF_INET, SOCK_STREAM, 0)) < 0)
@@ -93,24 +93,31 @@ client_tcp (void)
       exit (1);
     }
 
-#if 0
-  opt = 1;
-  optlen = sizeof (opt);
-  if (setsockopt (fd, IPPROTO_TCP, TCP_NODELAY, &opt, optlen) < 0)
+  if (benchmark_test_type == BENCHMARK_TEST_TYPE_TCPNODELAY)
     {
-      perror ("setsockopt");
-      exit (1);
-    }
+      int opt, optlen;
+      opt = 1;
+      optlen = sizeof (opt);
+      if (setsockopt (fd, IPPROTO_TCP, TCP_NODELAY, &opt, optlen) < 0)
+	{
+	  perror ("setsockopt");
+	  exit (1);
+	}
 
-  opt = 0;
-  optlen = sizeof (opt);
-  if (getsockopt (fd, IPPROTO_TCP, TCP_NODELAY, &opt, &optlen) < 0)
-    {
-      perror ("getsockopt");
-      exit (1);
-    }
+      opt = 0;
+      optlen = sizeof (opt);
+      if (getsockopt (fd, IPPROTO_TCP, TCP_NODELAY, &opt, &optlen) < 0)
+	{
+	  perror ("getsockopt");
+	  exit (1);
+	}
 
-#endif
+      if (!opt)
+	{
+	  fprintf (stderr, "TCP_NODELAY not set correctly\n");
+	  exit (1);
+	}
+    }
 
   gettimeofday (&starttime, NULL);
 

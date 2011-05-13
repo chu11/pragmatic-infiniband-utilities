@@ -44,6 +44,7 @@
 #include "simple_benchmark_common.h"
 #include "simple_benchmark_udp.h"
 
+extern benchmark_test_type_t benchmark_test_type;
 extern unsigned int retransmissiontimeout;
 extern unsigned int sessiontimeout;
 extern unsigned int verbose;
