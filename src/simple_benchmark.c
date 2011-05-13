@@ -40,7 +40,7 @@
  *
  * This benchmark tool is predominantly an investigation on all the
  * Infiniband APIs, and how they compare (performance wise) to
- * traditional TCP vs UDP (done over IPoIB).
+ * traditional TCP and UDP mechanisms (done over IPoIB).
  *
  * Feel free to critique implementation for increased performance.  I
  * did not pay particular close attention to it, choosing instead to
@@ -78,7 +78,8 @@ usage (const char *progname)
 	   "Test Types:\n"
 	   "--tcp        basic TCP data streaming\n"
 	   "--tcpnodelay basic TCP data streaming, but disable Nagle\n"
-	   "--udp        basic UDP send/ack data transfer\n"
+	   "--udp        basic UDP streaming, no reliability handled\n"
+	   "--udpsendack basic UDP send/ack data transfer\n"
 	   "\n"
 	   "Options:\n"
 	   " --host                   specify host to send to, required for client side\n"
@@ -112,6 +113,7 @@ main (int argc, char *argv[])
       {"tcp", 0, 0, TCP_ARGVAL},
       {"tcpnodelay", 0, 0, TCPNODELAY_ARGVAL},
       {"udp", 0, 0, UDP_ARGVAL},
+      {"udpsendack", 0, 0, UDPSENDACK_ARGVAL},
       {"host", 1, NULL, HOST_ARGVAL},
       {"blocksize", 1, NULL, BLOCKSIZE_ARGVAL},
       {"transfersize", 1, NULL, TRANSFERSIZE_ARGVAL},
@@ -147,6 +149,9 @@ main (int argc, char *argv[])
 	  break;
 	case UDP_ARGVAL:
 	  benchmark_test_type = BENCHMARK_TEST_TYPE_UDP;
+	  break;
+	case UDPSENDACK_ARGVAL:
+	  benchmark_test_type = BENCHMARK_TEST_TYPE_UDPSENDACK;
 	  break;
 	case HOST_ARGVAL:
 	  if (!(host = strdup (optarg)))
@@ -266,6 +271,7 @@ main (int argc, char *argv[])
 	server_tcp ();
       break;
     case BENCHMARK_TEST_TYPE_UDP:
+    case BENCHMARK_TEST_TYPE_UDPSENDACK:
       if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
 	client_udp ();
       else

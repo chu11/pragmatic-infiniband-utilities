@@ -32,12 +32,13 @@
 #define TCP_ARGVAL                   'T'
 #define TCPNODELAY_ARGVAL            128
 #define UDP_ARGVAL                   'U'
+#define UDPSENDACK_ARGVAL            129
 #define HOST_ARGVAL                  'H'
 #define BLOCKSIZE_ARGVAL             'b'
 #define TRANSFERSIZE_ARGVAL          't'
 #define RETRANSMISSIONTIMEOUT_ARGVAL 'r'
 #define SESSIONTIMEOUT_ARGVAL        's'
-#define VERIFYDATA_ARGVAL            129
+#define VERIFYDATA_ARGVAL            130
 #define PORT_ARGVAL                  'p'
 #define VERBOSE_ARGVAL               'v'
 #define HELP_ARGVAL                  'h'
@@ -72,6 +73,7 @@ typedef enum {
   BENCHMARK_TEST_TYPE_TCP,
   BENCHMARK_TEST_TYPE_TCPNODELAY,
   BENCHMARK_TEST_TYPE_UDP,
+  BENCHMARK_TEST_TYPE_UDPSENDACK,
 } benchmark_test_type_t;
 
 #endif /* _SIMPLE_BENCHMARK_H */

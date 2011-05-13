@@ -51,11 +51,10 @@ extern unsigned int verbose;
 
 /* Send/ACK protocol
  *
- * For this protocol, the sequence number will be a 1 byte sequence
+ * For the Send/ACK protocol, the sequence number will be a 1 byte sequence
  * number, prepended to the block.  Yeah, it probably will lead to
  * issues, particularly in regards to the fact that you might go
- * outside of a page size, but that's what we're going to do.  No
- * windowing, backoff, or anything fancy.
+ * outside of a page size, but that's what we're going to do.
  */
 
 /* return 0 on ack received, non-zero on need to retransmit */
@@ -65,6 +64,8 @@ _client_udp_wait_ack (int fd, uint8_t seq)
   struct timeval waitstart;
   struct timeval waittimeout;
   struct timeval waitend;
+
+  assert (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK);
 
   gettimeofday (&waitstart, NULL);
 
@@ -168,16 +169,20 @@ client_udp (void)
   setup_client_serveraddr (&serveraddr);
 
   calc_bufsize (&sendsize);
-  /* for sequence number */
-  sendsize++;
 
   buf = create_buf ();
 
   calc_blocks (&blocks_to_send);
 
-  retransmissions_to_timeout = sessiontimeout / retransmissiontimeout;
-  if (sessiontimeout % retransmissiontimeout)
-    retransmissions_to_timeout++;
+  if (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK)
+    {
+      /* for sequence number */
+      sendsize++;
+
+      retransmissions_to_timeout = sessiontimeout / retransmissiontimeout;
+      if (sessiontimeout % retransmissiontimeout)
+	retransmissions_to_timeout++;
+    }
 
   gettimeofday (&starttime, NULL);
 
@@ -229,23 +234,28 @@ client_udp (void)
       if (verbose > 1)
 	printf ("Wrote block %u of size %u\n", blocks_sent, sendsize);
 
-      ret = _client_udp_wait_ack (fd, seq);
-      if (ret)
+      if (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK)
 	{
-	  retransmission_count++;
-	  
-	  if (retransmission_count >= retransmissions_to_timeout)
+	  ret = _client_udp_wait_ack (fd, seq);
+	  if (ret)
 	    {
-	      printf ("Client ACK timeout\n");
-	      return;
+	      retransmission_count++;
+	      
+	      if (retransmission_count >= retransmissions_to_timeout)
+		{
+		  printf ("Client ACK timeout\n");
+		  return;
+		}
+	    }
+	  else
+	    {
+	      seq++;
+	      blocks_sent++;
+	      retransmission_count = 0;
 	    }
 	}
       else
-	{
-	  seq++;
-	  blocks_sent++;
-	  retransmission_count = 0;
-	}
+	blocks_sent++;
     }
 
   printf ("Wrote %u blocks, each %llu bytes\n",
@@ -276,6 +286,7 @@ _server_udp_send_ack (int fd,
   int sendlen;
 
   assert (remoteaddr);
+  assert (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK);
 
   do
     {
@@ -356,8 +367,6 @@ server_udp (void)
     }
 
   calc_bufsize (&recvsize);
-  /* for sequence number */
-  recvsize++;
 
   buf = create_buf ();
 
@@ -367,6 +376,10 @@ server_udp (void)
   if (sessiontimeout % retransmissiontimeout)
     retransmissions_to_timeout++;
 
+  if (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK)
+    /* for sequence number */
+    recvsize++;
+
   printf ("Starting server\n");
 
   while (blocks_received < blocks_to_receive)
@@ -374,6 +387,7 @@ server_udp (void)
       struct timeval recvstart;
       struct timeval recvtimeout;
       struct timeval recvend;
+      int server_timeout_flag = 0;
 
       gettimeofday (&recvstart, NULL);
 
@@ -415,15 +429,19 @@ server_udp (void)
 	      if (received_first_packet)
 		{
 		  retransmission_count++;
-
+		  
 		  if (retransmission_count >= retransmissions_to_timeout)
 		    {
 		      printf ("Server timeout\n");
-		      return;
+		      server_timeout_flag = 1;
+		      break;
 		    }
 		  
-		  /* Resend the previou seq */
-		  _server_udp_send_ack (fd, seq - 1, &remoteaddr);
+		  if (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK)
+		    {
+		      /* Resend the previou seq */
+		      _server_udp_send_ack (fd, seq - 1, &remoteaddr);
+		    }
 		}
 	      
 	      break;
@@ -490,11 +508,17 @@ server_udp (void)
 	  if (verbose > 1)
 	    printf ("Received block %u of size %u\n", blocks_received, recvsize);
 
-	  _server_udp_send_ack (fd, seq, &remoteaddr);
-	  seq++;
+	  if (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK)
+	    {
+	      _server_udp_send_ack (fd, seq, &remoteaddr);
+	      seq++;
+	    }
 
 	  break;
 	}
+
+      if (server_timeout_flag)
+	break;
     }
       
   printf ("Received %u blocks, each %llu bytes\n",
