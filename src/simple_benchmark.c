@@ -35,6 +35,10 @@
 #include "simple_benchmark.h"
 #include "simple_benchmark_tcp.h"
 #include "simple_benchmark_udp.h"
+#include "simple_benchmark_ibrc.h"
+#include "simple_benchmark_ibud.h"
+#include "simple_benchmark_rdmarc.h"
+#include "simple_benchmark_rdmaud.h"
 
 /* Notes:
  *
@@ -276,6 +280,30 @@ main (int argc, char *argv[])
 	client_udp ();
       else
 	server_udp ();
+      break;
+    case BENCHMARK_TEST_TYPE_IBRC:
+      if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
+	client_rdmarc ();
+      else
+	server_rdmarc ();
+      break;
+    case BENCHMARK_TEST_TYPE_IBUD:
+      if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
+	client_rdmaud ();
+      else
+	server_rdmaud ();
+      break;
+    case BENCHMARK_TEST_TYPE_RDMARC:
+      if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
+	client_rdmarc ();
+      else
+	server_rdmarc ();
+      break;
+    case BENCHMARK_TEST_TYPE_RDMAUD:
+      if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
+	client_rdmaud ();
+      else
+	server_rdmaud ();
       break;
     default:
       fprintf (stderr, "invalid benchmark_test_type: %u\n", benchmark_test_type);
