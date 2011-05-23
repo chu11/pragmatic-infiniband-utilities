@@ -38,7 +38,6 @@
 #include "simple_benchmark_ibrc.h"
 #include "simple_benchmark_ibud.h"
 #include "simple_benchmark_rdmarc.h"
-#include "simple_benchmark_rdmaud.h"
 
 /* Notes:
  *
@@ -283,15 +282,15 @@ main (int argc, char *argv[])
       break;
     case BENCHMARK_TEST_TYPE_IBRC:
       if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
-	client_rdmarc ();
+	client_ibrc ();
       else
-	server_rdmarc ();
+	server_ibrc ();
       break;
     case BENCHMARK_TEST_TYPE_IBUD:
       if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
-	client_rdmaud ();
+	client_ibud ();
       else
-	server_rdmaud ();
+	server_ibud ();
       break;
     case BENCHMARK_TEST_TYPE_RDMARC:
       if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
@@ -299,11 +298,6 @@ main (int argc, char *argv[])
       else
 	server_rdmarc ();
       break;
-    case BENCHMARK_TEST_TYPE_RDMAUD:
-      if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
-	client_rdmaud ();
-      else
-	server_rdmaud ();
       break;
     default:
       fprintf (stderr, "invalid benchmark_test_type: %u\n", benchmark_test_type);
