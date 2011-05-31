@@ -67,8 +67,9 @@ src_simple_benchmark_SOURCES = src/simple_benchmark.c \
 				src/simple_benchmark_common.c \
 				src/simple_benchmark_tcp.c \
 				src/simple_benchmark_udp.c \
-				src/simple_benchmark_rdmarc.c \
-				src/simple_benchmark_rdmaud.c
+				src/simple_benchmark_ibrc.c \
+				src/simple_benchmark_ibud.c \
+				src/simple_benchmark_rdmarc.c
 src_simple_benchmark_CFLAGS = -DOSM_VENDOR_INTF_OPENIB
 src_simple_benchmark_LDFLAGS = -losmvendor -lopensm -losmcomp -libmad -lrdmacm
 

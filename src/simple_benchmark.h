@@ -40,6 +40,7 @@
 #define SESSIONTIMEOUT_ARGVAL        's'
 #define VERIFYDATA_ARGVAL            130
 #define PORT_ARGVAL                  'p'
+#define MEMALIGN_ARGVAL              131
 #define VERBOSE_ARGVAL               'v'
 #define HELP_ARGVAL                  'h'
 

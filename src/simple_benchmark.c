@@ -70,6 +70,8 @@ int verifydata = 0;
 
 uint16_t port = PORT_DEFAULT;
 
+int memalign_flag = 0;
+
 unsigned int verbose = 0;
 
 static void
@@ -95,6 +97,7 @@ usage (const char *progname)
 	   " --verifydata             verify correctness of data on receive\n"
 #endif
 	   " --port                   port to use, default = %u\n"
+	   " --memalign               memalign buffer to send\n"
 	   " --verbose                increase verbosity of output, can be specified multiple times\n"
 	   " --help                   help\n",
 	   BLOCKSIZE_DEFAULT,
@@ -126,6 +129,7 @@ main (int argc, char *argv[])
       {"verifydata", 0, 0, VERIFYDATA_ARGVAL},
 #endif
       {"port", 1, NULL, PORT_ARGVAL},
+      {"memalign", 0, 0, MEMALIGN_ARGVAL},
       {"verbose", 0, 0, VERBOSE_ARGVAL},
       {"help", 0, 0, HELP_ARGVAL},
       {NULL, 0, 0, 0}
@@ -217,6 +221,9 @@ main (int argc, char *argv[])
 	      fprintf (stderr, "invalid port input\n");
 	      exit (1);
 	    }
+	  break;
+	case MEMALIGN_ARGVAL:
+	  memalign_flag = 1;
 	  break;
 	case VERBOSE_ARGVAL:
 	  verbose++;

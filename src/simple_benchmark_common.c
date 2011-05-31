@@ -30,9 +30,12 @@
 #include <stdint.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <unistd.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
+#include <errno.h>
+#include <malloc.h>
 #include <assert.h>
 
 #include "simple_benchmark.h"
@@ -43,6 +46,7 @@
 extern char *host;
 extern unsigned int blocksize;
 extern unsigned int transfersize;
+extern int memalign_flag;
 extern uint16_t port;
 
 void
@@ -84,10 +88,31 @@ create_buf (void)
 
   calc_bufsize (&s);
 
-  if (!(buf = (uint8_t *)malloc (s)))
+  if (!memalign_flag)
     {
-      perror ("malloc");
-      exit (1);
+      if (!(buf = (uint8_t *)malloc (s)))
+	{
+	  perror ("malloc");
+	  exit (1);
+	}
+    }
+  else
+    {
+      long pagesize;
+
+      errno = 0;
+      pagesize = sysconf(_SC_PAGESIZE);
+      if (pagesize < 0 && errno)
+	{
+	  perror ("sysconf");
+	  exit (1);
+	}
+
+      if (!(buf = (uint8_t *)memalign (pagesize, s)))
+	{
+	  perror ("memalign");
+	  exit (1);
+	}
     }
 
   memset (buf, BLOCK_PATTERN, s);
@@ -130,8 +155,6 @@ setup_server_serveraddr (struct sockaddr_in *serveraddr)
   struct hostent hent;
 
   assert (serveraddr);
-
-  gethostbyname_r_common (&hent);
 
   memset (serveraddr, '\0', sizeof (*serveraddr));
   serveraddr->sin_family = AF_INET;
