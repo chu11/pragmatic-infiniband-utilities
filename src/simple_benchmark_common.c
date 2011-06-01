@@ -47,6 +47,7 @@ extern char *host;
 extern unsigned int blocksize;
 extern unsigned int transfersize;
 extern int memalign_flag;
+extern int verifydata;
 extern uint16_t port;
 
 void
@@ -81,16 +82,15 @@ calc_bufsize (size_t *bufsize)
 }
 
 uint8_t *
-create_buf (void)
+create_buf (size_t bufsize)
 {
   uint8_t *buf;
-  size_t s;
 
-  calc_bufsize (&s);
+  assert (bufsize);
 
   if (!memalign_flag)
     {
-      if (!(buf = (uint8_t *)malloc (s)))
+      if (!(buf = (uint8_t *)malloc (bufsize)))
 	{
 	  perror ("malloc");
 	  exit (1);
@@ -108,14 +108,14 @@ create_buf (void)
 	  exit (1);
 	}
 
-      if (!(buf = (uint8_t *)memalign (pagesize, s)))
+      if (!(buf = (uint8_t *)memalign (pagesize, bufsize)))
 	{
 	  perror ("memalign");
 	  exit (1);
 	}
     }
 
-  memset (buf, BLOCK_PATTERN, s);
+  memset (buf, BLOCK_PATTERN, bufsize);
 
   return buf;
 }
@@ -185,4 +185,34 @@ elapsed_time_output (struct timeval *starttime, struct timeval *endtime)
     elapsedtime = (((endtime->tv_sec - starttime->tv_sec) - 1) * MICROSECOND_IN_SECOND) + (MICROSECOND_IN_SECOND - starttime->tv_usec) + (endtime->tv_usec);
 
   printf ("Elapsed Time: %llu microseconds\n", elapsedtime);
+}
+
+int
+check_data_correct (const uint8_t *buf, size_t bufsize)
+{
+  assert (buf);
+  assert (bufsize);
+
+  if (verifydata)
+    {
+      int databad_flag = 0;
+      
+      /* Lazy version, there has got to be a fast good version out
+       * there in a lib
+       */
+      while (bufsize)
+	{
+	  if (buf[0] != BLOCK_PATTERN)
+	    {
+	      databad_flag++;
+	      break;
+	    }
+	  bufsize--;
+	  buf++;
+	}
+
+      return (databad_flag);
+    }
+
+  return (0);
 }

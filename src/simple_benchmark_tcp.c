@@ -83,7 +83,7 @@ client_tcp (void)
 
   calc_bufsize (&writesize);
 
-  buf = create_buf ();
+  buf = create_buf (writesize);
 
   calc_blocks (&blocks_to_write);
 
@@ -212,7 +212,7 @@ _server_tcp_receive (int transferfd)
 
   calc_bufsize (&readsize);
 
-  buf = create_buf ();
+  buf = create_buf (readsize);
 
   calc_blocks (&blocks_to_read);
 
@@ -284,6 +284,9 @@ _server_tcp_receive (int transferfd)
 
       if (verbose > 1)
 	printf ("Received block %u of size %u\n", blocks_read, readsize);
+
+      if (check_data_correct (buf, readsize))
+	printf ("Block %u has invalid data\n", blocks_read);
     }
 
   printf ("Received %u blocks, each %llu bytes\n",

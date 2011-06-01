@@ -64,9 +64,7 @@ unsigned int retransmissiontimeout = RETRANSMISSIONTIMEOUT_DEFAULT;
 
 unsigned int sessiontimeout = SESSIONTIMEOUT_DEFAULT;
 
-#if 0
 int verifydata = 0;
-#endif
 
 uint16_t port = PORT_DEFAULT;
 
@@ -93,9 +91,7 @@ usage (const char *progname)
 	   " --transfersize           transfersize of data to send in megabytes, default = %u\n"
 	   " --retransmissiontimeout  timeout in milliseconds for retries in datagram based tests, default = %u\n"
 	   " --sessiontimeout         timeout in milliseconds for a server to give up, default = %u\n"
-#if 0
 	   " --verifydata             verify correctness of data on receive\n"
-#endif
 	   " --port                   port to use, default = %u\n"
 	   " --memalign               memalign buffer to send\n"
 	   " --verbose                increase verbosity of output, can be specified multiple times\n"
@@ -125,9 +121,7 @@ main (int argc, char *argv[])
       {"transfersize", 1, NULL, TRANSFERSIZE_ARGVAL},
       {"retransmissionteimout", 1, NULL, RETRANSMISSIONTIMEOUT_ARGVAL},
       {"sessionteimout", 1, NULL, SESSIONTIMEOUT_ARGVAL},
-#if 0
       {"verifydata", 0, 0, VERIFYDATA_ARGVAL},
-#endif
       {"port", 1, NULL, PORT_ARGVAL},
       {"memalign", 0, 0, MEMALIGN_ARGVAL},
       {"verbose", 0, 0, VERBOSE_ARGVAL},
@@ -207,11 +201,9 @@ main (int argc, char *argv[])
 	      exit (1);
 	    }
 	  break;
-#if 0
 	case VERIFYDATA_ARGVAL:
 	  verifydata = 1;
 	  break;
-#endif
 	case PORT_ARGVAL:
 	  port = strtoul (optarg, &endptr, 0);
 	  if (errno

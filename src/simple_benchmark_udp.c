@@ -51,10 +51,10 @@ extern unsigned int verbose;
 
 /* Send/ACK protocol
  *
- * For the Send/ACK protocol, the sequence number will be a 1 byte sequence
- * number, prepended to the block.  Yeah, it probably will lead to
- * issues, particularly in regards to the fact that you might go
- * outside of a page size, but that's what we're going to do.
+ * For the Send/ACK protocol, the sequence number will be a 1 byte
+ * sequence number, prepended to the block.  Yeah, it probably will
+ * lead to issues, particularly in regards to the fact that you might
+ * go outside of a page size, but that's what we're going to do.
  */
 
 /* return 0 on ack received, non-zero on need to retransmit */
@@ -170,8 +170,6 @@ client_udp (void)
 
   calc_bufsize (&sendsize);
 
-  buf = create_buf ();
-
   calc_blocks (&blocks_to_send);
 
   if (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK)
@@ -183,6 +181,8 @@ client_udp (void)
       if (sessiontimeout % retransmissiontimeout)
 	retransmissions_to_timeout++;
     }
+
+  buf = create_buf (sendsize);
 
   gettimeofday (&starttime, NULL);
 
@@ -368,17 +368,17 @@ server_udp (void)
 
   calc_bufsize (&recvsize);
 
-  buf = create_buf ();
+  if (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK)
+    /* for sequence number */
+    recvsize++;
+
+  buf = create_buf (recvsize);
 
   calc_blocks (&blocks_to_receive);
 
   retransmissions_to_timeout = sessiontimeout / retransmissiontimeout;
   if (sessiontimeout % retransmissiontimeout)
     retransmissions_to_timeout++;
-
-  if (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK)
-    /* for sequence number */
-    recvsize++;
 
   printf ("Starting server\n");
 
@@ -507,6 +507,14 @@ server_udp (void)
 
 	  if (verbose > 1)
 	    printf ("Received block %u of size %u\n", blocks_received, recvsize);
+
+	  if (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK)
+	    ret = check_data_correct (buf + 1, recvsize - 1);
+	  else
+	    ret = check_data_correct (buf, recvsize);
+	      
+	  if (ret)
+	    printf ("Block %u has invalid data\n", blocks_received);
 
 	  if (benchmark_test_type == BENCHMARK_TEST_TYPE_UDPSENDACK)
 	    {

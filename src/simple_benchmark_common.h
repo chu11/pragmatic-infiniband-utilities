@@ -37,7 +37,7 @@ void gethostbyname_r_common (struct hostent *hent);
 
 void calc_bufsize (size_t *bufsize);
 
-uint8_t *create_buf (void);
+uint8_t *create_buf (size_t bufsize);
 
 void calc_blocks (unsigned int *blocks);
 
@@ -46,5 +46,7 @@ void setup_client_serveraddr (struct sockaddr_in *serveraddr);
 void setup_server_serveraddr (struct sockaddr_in *serveraddr);
 
 void elapsed_time_output (struct timeval *starttime, struct timeval *endtime);
+
+int check_data_correct (const uint8_t *buf, size_t bufsize);
 
 #endif /* _SIMPLE_BENCHMARK_COMMON_H */
