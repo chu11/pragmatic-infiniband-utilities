@@ -45,13 +45,177 @@
 #include "simple_benchmark_common.h"
 #include "simple_benchmark_ibrc.h"
 
+#include <rdma/rdma_cma.h>
+#include <infiniband/verbs.h>
+
 extern benchmark_test_type_t benchmark_test_type;
 extern unsigned int sessiontimeout;
 extern unsigned int verbose;
 
+struct ibdata {
+  struct rdma_event_channel *cm_event_channel;
+  struct rdma_cm_id         *cm_id;
+
+  struct ibv_context *ibv_context;
+  struct ibv_pd      *ibv_pd;
+  struct ibv_mr      *ibv_mr;
+  struct ibv_cq      *ibv_cq;
+
+  uint8_t            *buf;
+  size_t             bufsize;
+};
+
+#define RDMA_TIMEOUT  2000
+
+#define CQE_DEFAULT   100
+
+#define MAX_SEND_WR_DEFAULT  512
+#define MAX_RECV_WR_DEFAULT  512
+#define MAX_SEND_SGE_DEFAULT 1
+#define MAX_RECV_SGE_DEFAULT 1
+
 void
 client_ibrc (void)
 {
+  struct ibdata ibdata;
+  struct sockaddr_in serveraddr;
+  unsigned int blocks_sent = 0;
+  unsigned int blocks_to_send = 0;
+  struct timeval starttime, endtime;
+  size_t sendsize;
+  struct hostent hent;
+  struct rdma_cm_event *cm_event;
+  struct ibv_qp_init_attr qp_init_attr;
+
+  memset (&ibdata, '\0', sizeof (ibdata));
+
+  if (!(ibdata.cm_event_channel = rdma_create_event_channel()))
+    {
+      fprintf (stderr, "rdma_create_event_channel failed\n");
+      exit (1);
+    }
+
+  if (rdma_create_id (ibdata.cm_event_channel,
+		      &ibdata.cm_id,
+		      NULL,
+		      RDMA_PS_TCP) < 0)
+    {
+      fprintf (stderr, "rdma_create_id failed\n");
+      exit (1);
+    }
+
+  setup_client_serveraddr (&serveraddr);
+
+  if (rdma_resolve_addr (ibdata.cm_id,
+			 NULL,
+			 (struct sockaddr *)&serveraddr,
+			 RDMA_TIMEOUT) < 0)
+    {
+      fprintf (stderr, "rdma_resolve_addr failed\n");
+      exit (1);
+    }
+
+  if (rdma_get_cm_event (ibdata.cm_event_channel,
+			 &cm_event) < 0)
+    {
+      fprintf (stderr, "rdma_get_cm_event failed\n");
+      exit (1);
+    }
+
+  if (cm_event->event != RDMA_CM_EVENT_ADDR_RESOLVED)
+    {
+      fprintf (stderr,
+	       "Received unexpected event %d\n",
+	       cm_event->event);
+      exit (1);
+    }
+  
+  if (rdma_ack_cm_event (cm_event) < 0)
+    {
+      fprintf (stderr, "rdma_ack_cm_event failed\n");
+      exit (1);
+    }
+
+  if (rdma_resolve_route (ibdata.cm_id, RDMA_TIMEOUT) < 0)
+    {
+      fprintf (stderr, "rdma_resolve_route failed\n");
+      exit (1);
+    }
+
+  if (rdma_get_cm_event (ibdata.cm_event_channel,
+                         &cm_event) < 0)
+    {
+      fprintf (stderr, "rdma_get_cm_event failed\n");
+      exit (1);
+    }
+
+  if (cm_event->event != RDMA_CM_EVENT_ROUTE_RESOLVED)
+    {
+      fprintf (stderr,
+               "Received unexpected event %d\n",
+               cm_event->event);
+      exit (1);
+    }
+
+  if (rdma_ack_cm_event (cm_event) < 0)
+    {
+      fprintf (stderr, "rdma_ack_cm_event failed\n");
+      exit (1);
+    }
+
+  calc_bufsize (&(ibdata.bufsize));
+
+  calc_blocks (&blocks_to_send);
+
+  ibdata.buf = create_buf (ibdata.bufsize);
+
+  /* ibv_context */
+  ibdata.ibv_context = ibdata.cm_id->verbs;
+
+  if (!(ibdata.ibv_pd = ibv_alloc_pd (ibdata.ibv_context)))
+    {
+      fprintf (stderr, "ibv_alloc_pd failed\n");
+      exit (1);
+    }
+
+  if (!(ibdata.ibv_mr = ibv_reg_mr (ibdata.ibv_pd,
+			      ibdata.buf,
+			      ibdata.bufsize,
+			      IBV_ACCESS_LOCAL_WRITE)))
+    {
+      fprintf (stderr, "ibv_reg_mr failed\n");
+      exit (1);
+    }
+
+  if (!(ibdata.ibv_cq = ibv_create_cq (ibdata.ibv_context,
+				 CQE_DEFAULT,
+				 NULL,
+				 NULL,
+				 0)))
+    {
+      fprintf (stderr, "ibv_create_cq failed\n");
+      exit (1);
+    }
+
+  memset (&qp_init_attr, '\0', sizeof (qp_init_attr));
+  qp_init_attr.send_cq = ibdata.ibv_cq;
+  qp_init_attr.recv_cq = ibdata.ibv_cq;
+  qp_init_attr.cap.max_send_wr = MAX_SEND_WR_DEFAULT;
+  qp_init_attr.cap.max_recv_wr = MAX_RECV_WR_DEFAULT;
+  qp_init_attr.cap.max_send_sge = MAX_SEND_SGE_DEFAULT;
+  qp_init_attr.cap.max_recv_sge = MAX_RECV_SGE_DEFAULT;
+  qp_init_attr.cap.max_inline_data = 0;
+  qp_init_attr.sq_sig_all = 1;	/* generate CE for all WR */
+  qp_init_attr.qp_type = IBV_QPT_RC;
+
+  if (rdma_create_qp (ibdata.cm_id, ibdata.ibv_pd, &qp_init_attr) < 0)
+    {
+      fprintf (stderr, "rdma_create_qp failed\n");
+      exit (1);
+    }
+
+  gettimeofday (&starttime, NULL);
+  
 }
 
 void
