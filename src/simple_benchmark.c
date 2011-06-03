@@ -83,6 +83,7 @@ usage (const char *progname)
 	   "--tcpnodelay basic TCP data streaming, but disable Nagle\n"
 	   "--udp        basic UDP streaming, no reliability handled\n"
 	   "--udpsendack basic UDP send/ack data transfer\n"
+	   "--ibrc       basic IB RC streaming\n"
 	   "\n"
 	   "Options:\n"
 	   " --host                   specify host to send to, required for client side\n"
@@ -116,6 +117,7 @@ main (int argc, char *argv[])
       {"tcpnodelay", 0, 0, TCPNODELAY_ARGVAL},
       {"udp", 0, 0, UDP_ARGVAL},
       {"udpsendack", 0, 0, UDPSENDACK_ARGVAL},
+      {"ibrc", 0, 0, IBRC_ARGVAL},
       {"host", 1, NULL, HOST_ARGVAL},
       {"blocksize", 1, NULL, BLOCKSIZE_ARGVAL},
       {"transfersize", 1, NULL, TRANSFERSIZE_ARGVAL},
@@ -153,6 +155,9 @@ main (int argc, char *argv[])
 	  break;
 	case UDPSENDACK_ARGVAL:
 	  benchmark_test_type = BENCHMARK_TEST_TYPE_UDPSENDACK;
+	  break;
+	case IBRC_ARGVAL:
+	  benchmark_test_type = BENCHMARK_TEST_TYPE_IBRC;
 	  break;
 	case HOST_ARGVAL:
 	  if (!(host = strdup (optarg)))

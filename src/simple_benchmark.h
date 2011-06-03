@@ -33,14 +33,15 @@
 #define TCPNODELAY_ARGVAL            128
 #define UDP_ARGVAL                   'U'
 #define UDPSENDACK_ARGVAL            129
+#define IBRC_ARGVAL                  130
 #define HOST_ARGVAL                  'H'
 #define BLOCKSIZE_ARGVAL             'b'
 #define TRANSFERSIZE_ARGVAL          't'
 #define RETRANSMISSIONTIMEOUT_ARGVAL 'r'
 #define SESSIONTIMEOUT_ARGVAL        's'
-#define VERIFYDATA_ARGVAL            130
+#define VERIFYDATA_ARGVAL            131
 #define PORT_ARGVAL                  'p'
-#define MEMALIGN_ARGVAL              131
+#define MEMALIGN_ARGVAL              132
 #define VERBOSE_ARGVAL               'v'
 #define HELP_ARGVAL                  'h'
 
