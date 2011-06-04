@@ -55,7 +55,7 @@ extern unsigned int verbose;
 struct ibdata {
   struct rdma_event_channel *cm_event_channel;
   struct rdma_cm_id         *cm_id;
-  struct rdma_cm_id         *cm_accept_id;
+  struct rdma_cm_id         *cm_connected_id;
   struct rdma_conn_param    cm_conn_param;
 
   struct ibv_context *ibv_context;
@@ -72,8 +72,8 @@ struct ibdata {
 
 #define CQE_DEFAULT   100
 
-#define MAX_SEND_WR_DEFAULT  512
-#define MAX_RECV_WR_DEFAULT  512
+#define MAX_SEND_WR_DEFAULT  256
+#define MAX_RECV_WR_DEFAULT  1024
 #define MAX_SEND_SGE_DEFAULT 32
 #define MAX_RECV_SGE_DEFAULT 32
 
@@ -84,7 +84,9 @@ struct ibdata {
 
 #define BACKLOG_DEFAULT             0
 
-#define RECEIVE_WR_ID               0
+#define MICROSECONDS_IN_SECOND      1000000
+#define MICROSECONDS_IN_MILLISECOND 1000
+
 #define SEND_WR_ID                  1
 
 static void
@@ -104,6 +106,61 @@ _init_cm (struct ibdata *ibdata)
 		      RDMA_PS_TCP) < 0)
     {
       fprintf (stderr, "rdma_create_id failed\n");
+      exit (1);
+    }
+}
+
+static void
+_init_ibv_data (struct ibdata *ibdata)
+{
+  assert (ibdata);
+
+  if (!(ibdata->ibv_pd = ibv_alloc_pd (ibdata->ibv_context)))
+    {
+      fprintf (stderr, "ibv_alloc_pd failed\n");
+      exit (1);
+    }
+
+  if (!(ibdata->ibv_mr = ibv_reg_mr (ibdata->ibv_pd,
+				     ibdata->buf,
+				     ibdata->bufsize,
+				     IBV_ACCESS_LOCAL_WRITE)))
+    {
+      fprintf (stderr, "ibv_reg_mr failed\n");
+      exit (1);
+    }
+
+  if (!(ibdata->ibv_cq = ibv_create_cq (ibdata->ibv_context,
+					CQE_DEFAULT,
+					NULL,
+					NULL,
+					0)))
+    {
+      fprintf (stderr, "ibv_create_cq failed\n");
+      exit (1);
+    }
+}
+
+static void
+_destroy_ibv_data (struct ibdata *ibdata)
+{
+  assert (ibdata);
+
+  if (ibv_dealloc_pd (ibdata->ibv_pd) < 0)
+    {
+      fprintf (stderr, "ibv_dealloc_pd failed\n");
+      exit (1);
+    }
+
+  if (ibv_destroy_cq (ibdata->ibv_cq) < 0)
+    {
+      fprintf (stderr, "ibv_destroy_cq failed\n");
+      exit (1);
+    }
+
+  if (ibv_dereg_mr (ibdata->ibv_mr) < 0)
+    {
+      fprintf (stderr, "ibv_dereg_mr failed\n");
       exit (1);
     }
 }
@@ -181,30 +238,7 @@ client_ibrc (void)
   /* ibv_context */
   ibdata.ibv_context = ibdata.cm_id->verbs;
 
-  if (!(ibdata.ibv_pd = ibv_alloc_pd (ibdata.ibv_context)))
-    {
-      fprintf (stderr, "ibv_alloc_pd failed\n");
-      exit (1);
-    }
-
-  if (!(ibdata.ibv_mr = ibv_reg_mr (ibdata.ibv_pd,
-				    ibdata.buf,
-				    ibdata.bufsize,
-				    IBV_ACCESS_LOCAL_WRITE)))
-    {
-      fprintf (stderr, "ibv_reg_mr failed\n");
-      exit (1);
-    }
-
-  if (!(ibdata.ibv_cq = ibv_create_cq (ibdata.ibv_context,
-				       CQE_DEFAULT,
-				       NULL,
-				       NULL,
-				       0)))
-    {
-      fprintf (stderr, "ibv_create_cq failed\n");
-      exit (1);
-    }
+  _init_ibv_data (&ibdata);
 
   memset (&qp_init_attr, '\0', sizeof (qp_init_attr));
   qp_init_attr.send_cq = ibdata.ibv_cq;
@@ -236,73 +270,77 @@ client_ibrc (void)
 
   _cm_event (&ibdata, RDMA_CM_EVENT_ESTABLISHED);
 
+  /* ibv_qp */
   ibdata.ibv_qp = ibdata.cm_id->qp;
 
   gettimeofday (&starttime, NULL);
 
-  {
-    struct ibv_sge sge;
-    struct ibv_send_wr send_wr;
-    struct ibv_send_wr *bad_wr;
-    struct ibv_wc wc;
-    int wcs;
-
-    sge.addr = (uint64_t)ibdata.buf;
-    sge.length = ibdata.bufsize;
-    sge.lkey = ibdata.ibv_mr->lkey;
+  while (blocks_sent < blocks_to_send)
+    {
+      struct ibv_sge sge;
+      struct ibv_send_wr send_wr;
+      struct ibv_send_wr *bad_wr;
+      struct ibv_wc wc;
+      int wcs;
+      
+      sge.addr = (uint64_t)ibdata.buf;
+      sge.length = ibdata.bufsize;
+      sge.lkey = ibdata.ibv_mr->lkey;
     
-    send_wr.wr_id = SEND_WR_ID;
-    send_wr.next = NULL;
-    send_wr.sg_list = &sge;
-    send_wr.num_sge = 1;
-    send_wr.opcode = IBV_WR_SEND;
-    send_wr.send_flags = IBV_SEND_SIGNALED;
-    
-    if (ibv_post_send (ibdata.ibv_qp, &send_wr, &bad_wr) < 0)
-      {
-	fprintf (stderr, "ibv_post_send failed\n");
-	exit (1);
-      }
-    
-    do {
-      if ((wcs = ibv_poll_cq (ibdata.ibv_cq, 1, &wc)) < 0)
+      send_wr.wr_id = SEND_WR_ID;
+      send_wr.next = NULL;
+      send_wr.sg_list = &sge;
+      send_wr.num_sge = 1;
+      send_wr.opcode = IBV_WR_SEND;
+      send_wr.send_flags = IBV_SEND_SIGNALED;
+      
+      if (ibv_post_send (ibdata.ibv_qp, &send_wr, &bad_wr) < 0)
 	{
-	  fprintf (stderr, "ibv_poll_cq failed\n");
+	  fprintf (stderr, "ibv_post_send failed\n");
 	  exit (1);
 	}
-    } while (!wcs);
     
-    if (wcs != 1)
-      {
-	fprintf (stderr, "Unexpected wcs count %d\n");
-	exit (1);
-      }
-
-    if (wc.wr_id != SEND_WR_ID)
-      {
-	fprintf (stderr,
-		 "Unexpected wr id %u, expected %u\n",
-		 wc.wr_id, SEND_WR_ID);
-	exit (1);
-      }
-
-    if (wc.status != IBV_WC_SUCCESS)
-      {
-	fprintf (stderr, "Bad wc status %u\n", wc.status);
-	exit (1);
-      }
-    
-    if (wc.opcode != IBV_WC_SEND)
-      {
-	fprintf (stderr,
-		 "Unexpected wc opcode %u, expected %u\n",
-		 wc.opcode, IBV_WC_SEND);
-	exit (1);
-      }
-
-    if (verbose)
-      printf ("Sent data\n");
-  }
+      do {
+	if ((wcs = ibv_poll_cq (ibdata.ibv_cq, 1, &wc)) < 0)
+	  {
+	    fprintf (stderr, "ibv_poll_cq failed\n");
+	    exit (1);
+	  }
+      } while (!wcs);
+      
+      if (wcs != 1)
+	{
+	  fprintf (stderr, "Unexpected wcs count %d\n");
+	  exit (1);
+	}
+      
+      if (wc.wr_id != SEND_WR_ID)
+	{
+	  fprintf (stderr,
+		   "Unexpected wr id %u, expected %u\n",
+		   wc.wr_id, SEND_WR_ID);
+	  exit (1);
+	}
+      
+      if (wc.status != IBV_WC_SUCCESS)
+	{
+	  fprintf (stderr, "Bad wc status %u\n", wc.status);
+	  exit (1);
+	}
+      
+      if (wc.opcode != IBV_WC_SEND)
+	{
+	  fprintf (stderr,
+		   "Unexpected wc opcode %u, expected %u\n",
+		   wc.opcode, IBV_WC_SEND);
+	  exit (1);
+	}
+      
+      if (verbose > 1)
+	printf ("Wrote block %u of size %u\n", blocks_sent, ibdata.bufsize);
+      
+      blocks_sent++;
+    }
 
   printf ("Wrote %u blocks, each %llu bytes\n",
           blocks_sent,
@@ -325,23 +363,7 @@ client_ibrc (void)
 
   rdma_destroy_qp (ibdata.cm_id);
 
-  if (ibv_dealloc_pd (ibdata.ibv_pd) < 0)
-    {
-      fprintf (stderr, "ibv_dealloc_pd failed\n");
-      exit (1);
-    }
-
-  if (ibv_destroy_cq (ibdata.ibv_cq) < 0)
-    {
-      fprintf (stderr, "ibv_destroy_cq failed\n");
-      exit (1);
-    }
-
-  if (ibv_dereg_mr (ibdata.ibv_mr) < 0)
-    {
-      fprintf (stderr, "ibv_dereg_mr failed\n");
-      exit (1);
-    }
+  _destroy_ibv_data (&ibdata);
 
   if (rdma_destroy_id (ibdata.cm_id) < 0)
     {
@@ -354,6 +376,51 @@ client_ibrc (void)
   free (ibdata.buf);
 }
 
+static unsigned int
+_millisecond_timeval_diff (struct timeval *start, struct timeval *end)
+{
+  unsigned long t;
+
+  assert (start);
+  assert (end);
+
+  if (end->tv_sec == start->tv_sec)
+    t = end->tv_usec - start->tv_usec;
+  else
+    {
+      t = (end->tv_sec - start->tv_sec - 1) * MICROSECONDS_IN_SECOND;
+      t += (MICROSECONDS_IN_SECOND - start->tv_usec);
+      t += end->tv_usec;
+    }
+
+  return (t / MICROSECONDS_IN_MILLISECOND);
+}
+
+static void
+_server_post_recv (struct ibdata *ibdata, uint64_t wr_id)
+{
+  struct ibv_sge sge;
+  struct ibv_recv_wr recv_wr;
+  struct ibv_recv_wr *bad_wr;
+
+  assert (ibdata);
+
+  sge.addr = (uint64_t)ibdata->buf;
+  sge.length = ibdata->bufsize;
+  sge.lkey = ibdata->ibv_mr->lkey;
+	
+  recv_wr.wr_id = wr_id;
+  recv_wr.next = NULL;
+  recv_wr.sg_list = &sge;
+  recv_wr.num_sge = 1;
+  
+  if (ibv_post_recv (ibdata->ibv_qp, &recv_wr, &bad_wr) < 0)
+    {
+      fprintf (stderr, "ibv_post_recv failed\n");
+      exit (1);
+    }
+}
+
 void
 server_ibrc (void)
 {
@@ -363,6 +430,7 @@ server_ibrc (void)
   unsigned int blocks_received = 0;
   unsigned int blocks_to_receive = 0;
   struct ibv_qp_init_attr qp_init_attr;
+  unsigned int i;
 
   memset (&ibdata, '\0', sizeof (ibdata));
 
@@ -399,7 +467,7 @@ server_ibrc (void)
       exit (1);
     }
   
-  ibdata.cm_accept_id = cm_connect_event->id;
+  ibdata.cm_connected_id = cm_connect_event->id;
 
   calc_bufsize (&(ibdata.bufsize));
 
@@ -407,33 +475,10 @@ server_ibrc (void)
 
   ibdata.buf = create_buf (ibdata.bufsize);
 
-  /* ibv_context */
-  ibdata.ibv_context = ibdata.cm_accept_id->verbs;
+  /* ibv_context - from connected id*/
+  ibdata.ibv_context = ibdata.cm_connected_id->verbs;
  
-  if (!(ibdata.ibv_pd = ibv_alloc_pd (ibdata.ibv_context)))
-    {
-      fprintf (stderr, "ibv_alloc_pd failed\n");
-      exit (1);
-    }
-  
-  if (!(ibdata.ibv_mr = ibv_reg_mr (ibdata.ibv_pd,
-				    ibdata.buf,
-				    ibdata.bufsize,
-				    IBV_ACCESS_LOCAL_WRITE)))
-    {
-      fprintf (stderr, "ibv_reg_mr failed\n");
-      exit (1);
-    }
-
-  if (!(ibdata.ibv_cq = ibv_create_cq (ibdata.ibv_context,
-				       CQE_DEFAULT,
-				       NULL,
-				       NULL,
-				       0)))
-    {
-      fprintf (stderr, "ibv_create_cq failed\n");
-      exit (1);
-    }
+  _init_ibv_data (&ibdata);
 
   memset (&qp_init_attr, '\0', sizeof (qp_init_attr));
   qp_init_attr.send_cq = ibdata.ibv_cq;
@@ -445,92 +490,96 @@ server_ibrc (void)
   qp_init_attr.cap.max_inline_data = 0;
   qp_init_attr.sq_sig_all = 1;	/* generate CE for all WR */
   qp_init_attr.qp_type = IBV_QPT_RC;
-
-  if (rdma_create_qp (ibdata.cm_accept_id, ibdata.ibv_pd, &qp_init_attr) < 0)
+  
+  if (rdma_create_qp (ibdata.cm_connected_id, ibdata.ibv_pd, &qp_init_attr) < 0)
     {
       fprintf (stderr, "rdma_create_qp failed\n");
       exit (1);
     }
-
-  ibdata.ibv_qp = ibdata.cm_accept_id->qp;
-
-  {
-    struct ibv_sge sge;
-    struct ibv_recv_wr recv_wr;
-    struct ibv_recv_wr *bad_wr;
-    struct ibv_wc wc;
-    int wcs;
-
-    sge.addr = (uint64_t)ibdata.buf;
-    sge.length = ibdata.bufsize;
-    sge.lkey = ibdata.ibv_mr->lkey;
-    
-    recv_wr.wr_id = RECEIVE_WR_ID;
-    recv_wr.next = NULL;
-    recv_wr.sg_list = &sge;
-    recv_wr.num_sge = 1;
-    
-    if (ibv_post_recv (ibdata.ibv_qp, &recv_wr, &bad_wr) < 0)
-      {
-	fprintf (stderr, "ibv_post_recv failed\n");
-	exit (1);
-      }
-    
-    ibdata.cm_conn_param.responder_resources = RESPONDER_RESOURCES_DEFAULT;
-    ibdata.cm_conn_param.initiator_depth = INITIATOR_DEPTH_DEFAULT;
   
-    if (rdma_accept (ibdata.cm_accept_id, &ibdata.cm_conn_param) < 0)
-      {
-	fprintf (stderr, "rdma_accept failed\n");
-	exit (1);
-      }
+  /* ibv_qp - from connected id */
+  ibdata.ibv_qp = ibdata.cm_connected_id->qp;
+
+  for (i = 0; i < MAX_RECV_WR_DEFAULT; i++)
+    _server_post_recv (&ibdata, i);
     
-    _cm_event (&ibdata, RDMA_CM_EVENT_ESTABLISHED);
-    
-    printf ("Accepted connection\n");
+  ibdata.cm_conn_param.responder_resources = RESPONDER_RESOURCES_DEFAULT;
+  ibdata.cm_conn_param.initiator_depth = INITIATOR_DEPTH_DEFAULT;
   
-    do {
-      if ((wcs = ibv_poll_cq (ibdata.ibv_cq, 1, &wc)) < 0)
+  if (rdma_accept (ibdata.cm_connected_id, &ibdata.cm_conn_param) < 0)
+    {
+      fprintf (stderr, "rdma_accept failed\n");
+      exit (1);
+    }
+    
+  _cm_event (&ibdata, RDMA_CM_EVENT_ESTABLISHED);
+  
+  printf ("Accepted connection\n");
+  
+  while (blocks_received < blocks_to_receive)
+    {
+      unsigned long t;
+      struct timeval spinstart;
+      struct timeval spinend;
+      struct ibv_wc wc;
+      int wcs;
+      
+      gettimeofday (&spinstart, NULL);
+      
+      do {
+	if ((wcs = ibv_poll_cq (ibdata.ibv_cq, 1, &wc)) < 0)
+	  {
+	    fprintf (stderr, "ibv_poll_cq failed\n");
+	    exit (1);
+	  }
+	
+	gettimeofday (&spinend, NULL);
+	
+	t = _millisecond_timeval_diff (&spinstart, &spinend);
+	if (t > sessiontimeout)
+	  goto breakout;
+      } while (!wcs);
+      
+      if (wcs != 1)
 	{
-	  fprintf (stderr, "ibv_poll_cq failed\n");
+	  fprintf (stderr, "Unexpected wcs count %d\n");
 	  exit (1);
 	}
-    } while (!wcs);
-    
-    if (wcs != 1)
-      {
-	fprintf (stderr, "Unexpected wcs count %d\n");
-	exit (1);
-      }
+	
+      if (wc.status != IBV_WC_SUCCESS)
+	{
+	  fprintf (stderr, "Bad wc status %u\n", wc.status);
+	  exit (1);
+	}
+	
+      if (wc.opcode != IBV_WC_RECV)
+	{
+	  fprintf (stderr,
+		   "Unexpected wc opcode %u, expected %u\n",
+		   wc.opcode, IBV_WC_RECV);
+	  exit (1);
+	}
+	
+      /* put back WR that was taken out */
+      _server_post_recv (&ibdata, wc.wr_id);
 
-    if (wc.wr_id != RECEIVE_WR_ID)
-      {
-	fprintf (stderr,
-		 "Unexpected wr id %u, expected %u\n",
-		 wc.wr_id, RECEIVE_WR_ID);
-	exit (1);
-      }
+      blocks_received++;
+	
+      if (verbose > 1)
+	printf ("Received block %u of size %u\n", blocks_received, ibdata.bufsize);
+      
+      if (check_data_correct (ibdata.buf, ibdata.bufsize))
+	printf ("Block %u has invalid data\n", blocks_received);
+    }
 
-    if (wc.status != IBV_WC_SUCCESS)
-      {
-	fprintf (stderr, "Bad wc status %u\n", wc.status);
-	exit (1);
-      }
-   
-    if (wc.opcode != IBV_WC_RECV)
-      {
-	fprintf (stderr,
-		 "Unexpected wc opcode %u, expected %u\n",
-		 wc.opcode, IBV_WC_RECV);
-	exit (1);
-      }
+ breakout:
 
-    if (verbose)
-      printf ("Received data\n");
-
-    if (check_data_correct (ibdata.buf, ibdata.bufsize))
-      printf ("Block has invalid data\n");
-  }
+  printf ("Received %u blocks, each %llu bytes\n",
+          blocks_received,
+          ibdata.bufsize);
+  
+  printf ("Total received %llu bytes\n",
+          (uint64_t)blocks_received * ibdata.bufsize);
 
   if (rdma_ack_cm_event (cm_connect_event) < 0)
     {
@@ -538,25 +587,9 @@ server_ibrc (void)
       exit (1);
     }
 
-  rdma_destroy_qp (ibdata.cm_accept_id);
+  rdma_destroy_qp (ibdata.cm_connected_id);
 
-  if (ibv_dealloc_pd (ibdata.ibv_pd) < 0)
-    {
-      fprintf (stderr, "ibv_dealloc_pd failed\n");
-      exit (1);
-    }
-
-  if (ibv_destroy_cq (ibdata.ibv_cq) < 0)
-    {
-      fprintf (stderr, "ibv_destroy_cq failed\n");
-      exit (1);
-    }
-
-  if (ibv_dereg_mr (ibdata.ibv_mr) < 0)
-    {
-      fprintf (stderr, "ibv_dereg_mr failed\n");
-      exit (1);
-    }
+  _destroy_ibv_data (&ibdata);
 
   if (rdma_destroy_id (ibdata.cm_id) < 0)
     {
@@ -564,7 +597,7 @@ server_ibrc (void)
       exit (1);
     }
 
-  if (rdma_destroy_id (ibdata.cm_accept_id) < 0)
+  if (rdma_destroy_id (ibdata.cm_connected_id) < 0)
     {
       fprintf (stderr, "rdma_destroy_id failed\n");
       exit (1);
