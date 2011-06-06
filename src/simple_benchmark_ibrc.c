@@ -518,7 +518,6 @@ server_ibrc (void)
   
   while (blocks_received < blocks_to_receive)
     {
-      unsigned long t;
       struct timeval spinstart;
       struct timeval spinend;
       struct ibv_wc wc;
@@ -527,6 +526,8 @@ server_ibrc (void)
       gettimeofday (&spinstart, NULL);
       
       do {
+	unsigned long t;
+
 	if ((wcs = ibv_poll_cq (ibdata.ibv_cq, 1, &wc)) < 0)
 	  {
 	    fprintf (stderr, "ibv_poll_cq failed\n");
@@ -537,7 +538,10 @@ server_ibrc (void)
 	
 	t = _millisecond_timeval_diff (&spinstart, &spinend);
 	if (t > sessiontimeout)
-	  goto breakout;
+	  {
+	    fprintf (stderr, "Server timeout\n");
+	    goto breakout;
+	  }
       } while (!wcs);
       
       if (wcs != 1)
