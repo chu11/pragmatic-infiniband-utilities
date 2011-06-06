@@ -72,15 +72,15 @@ struct ibdata {
 
 #define CQE_DEFAULT   100
 
-#define MAX_SEND_WR_DEFAULT  256
-#define MAX_RECV_WR_DEFAULT  1024
-#define MAX_SEND_SGE_DEFAULT 32
-#define MAX_RECV_SGE_DEFAULT 32
+#define MAX_SEND_WR_DEFAULT  300
+#define MAX_RECV_WR_DEFAULT  600
+#define MAX_SEND_SGE_DEFAULT 1
+#define MAX_RECV_SGE_DEFAULT 1
 
 #define RESPONDER_RESOURCES_DEFAULT 1
 #define INITIATOR_DEPTH_DEFAULT     1
-#define RETRY_COUNT_DEFAULT         10
-#define RNR_RETRY_COUNT_DEFAULT     10
+#define RETRY_COUNT_DEFAULT         7
+#define RNR_RETRY_COUNT_DEFAULT     7
 
 #define BACKLOG_DEFAULT             0
 
@@ -88,6 +88,65 @@ struct ibdata {
 #define MICROSECONDS_IN_MILLISECOND 1000
 
 #define SEND_WR_ID                  1
+
+static void
+_qp_attr (struct ibdata *ibdata)
+{
+  struct ibv_qp_attr attr;
+  struct ibv_qp_init_attr init_attr;
+  
+  memset (&attr, '\0', sizeof(attr));
+  
+  if (ibv_query_qp (ibdata->ibv_qp,
+		    &attr,
+		    0xFFFFFFFF,
+		    &init_attr) < 0)
+    {
+      fprintf(stderr, "failed to query qp\n");
+      return;
+    }
+  
+  fprintf (stderr,
+	   " QP query:\n"
+	   "   qp num              : 0x%X\n"
+	   "   events completed    : %d\n"
+	   "   State               : %u\n"
+	   "   Cur State           : %u\n" 
+	   "   rq psn              : %d\n"
+	   "   sq psn              : %d\n"
+	   "   dest qp num         : 0x%X\n"
+	   "   cap.max send wr     : %d\n"
+	   "   cap.max recv wr     : %d\n"
+	   "   cap.max send sge    : %d\n"
+	   "   cap.max recv sge    : %d\n"
+	   "   cap.max inline data : %d\n"
+	   "   sq draining         : %d\n"
+	   "   min_rnr_timer       : %d\n"
+	   "   port num            : %d\n"
+	   "   timeout             : %d\n"
+	   "   retry_cnt           : %u\n"
+	   "   rnr retry           : %d\n"
+	   ,
+	   ibdata->ibv_qp->qp_num,
+	   ibdata->ibv_qp->events_completed,
+	   attr.qp_state,
+	   attr.cur_qp_state,
+	   attr.rq_psn,
+	   attr.sq_psn,
+	   attr.dest_qp_num,
+	   attr.cap.max_send_wr,
+	   attr.cap.max_recv_wr,
+	   attr.cap.max_send_sge,
+	   attr.cap.max_recv_sge,
+	   attr.cap.max_inline_data,
+	   attr.sq_draining,
+	   attr.min_rnr_timer,
+	   attr.port_num,
+	   attr.timeout,
+	   attr.retry_cnt,
+	   attr.rnr_retry
+	   );
+}
 
 static void
 _init_cm (struct ibdata *ibdata)
@@ -124,6 +183,8 @@ _init_ibv_data (struct ibdata *ibdata)
   if (!(ibdata->ibv_mr = ibv_reg_mr (ibdata->ibv_pd,
 				     ibdata->buf,
 				     ibdata->bufsize,
+				     IBV_ACCESS_REMOTE_WRITE |
+				     IBV_ACCESS_REMOTE_READ |
 				     IBV_ACCESS_LOCAL_WRITE)))
     {
       fprintf (stderr, "ibv_reg_mr failed\n");
@@ -273,6 +334,12 @@ client_ibrc (void)
   /* ibv_qp */
   ibdata.ibv_qp = ibdata.cm_id->qp;
 
+  if (verbose > 1)
+    {
+      fprintf (stderr, "Client QP info\n");
+      _qp_attr (&ibdata);
+    }
+
   gettimeofday (&starttime, NULL);
 
   while (blocks_sent < blocks_to_send)
@@ -325,6 +392,11 @@ client_ibrc (void)
       if (wc.status != IBV_WC_SUCCESS)
 	{
 	  fprintf (stderr, "Bad wc status %u\n", wc.status);
+	  if (verbose > 1)
+	    {
+	      fprintf (stderr, "Client QP info\n");
+	      _qp_attr (&ibdata);
+	    }
 	  exit (1);
 	}
       
@@ -500,11 +572,19 @@ server_ibrc (void)
   /* ibv_qp - from connected id */
   ibdata.ibv_qp = ibdata.cm_connected_id->qp;
 
+  if (verbose > 1)
+    {
+      fprintf (stderr, "Server pre-accept QP info\n");
+      _qp_attr (&ibdata);
+    }
+
   for (i = 0; i < MAX_RECV_WR_DEFAULT; i++)
     _server_post_recv (&ibdata, i);
     
   ibdata.cm_conn_param.responder_resources = RESPONDER_RESOURCES_DEFAULT;
   ibdata.cm_conn_param.initiator_depth = INITIATOR_DEPTH_DEFAULT;
+  ibdata.cm_conn_param.retry_count = RETRY_COUNT_DEFAULT;
+  ibdata.cm_conn_param.rnr_retry_count = RNR_RETRY_COUNT_DEFAULT;
   
   if (rdma_accept (ibdata.cm_connected_id, &ibdata.cm_conn_param) < 0)
     {
@@ -514,6 +594,12 @@ server_ibrc (void)
     
   _cm_event (&ibdata, RDMA_CM_EVENT_ESTABLISHED);
   
+  if (verbose > 1)
+    {
+      fprintf (stderr, "Server post-accept QP info\n");
+      _qp_attr (&ibdata);
+    }
+
   printf ("Accepted connection\n");
   
   while (blocks_received < blocks_to_receive)
@@ -540,6 +626,11 @@ server_ibrc (void)
 	if (t > sessiontimeout)
 	  {
 	    fprintf (stderr, "Server timeout\n");
+	    if (verbose > 1)
+	      {
+		fprintf (stderr, "Server QP info\n");
+		_qp_attr (&ibdata);
+	      }
 	    goto breakout;
 	  }
       } while (!wcs);
@@ -553,6 +644,11 @@ server_ibrc (void)
       if (wc.status != IBV_WC_SUCCESS)
 	{
 	  fprintf (stderr, "Bad wc status %u\n", wc.status);
+	  if (verbose > 1)
+	    {
+	      fprintf (stderr, "Server QP info\n");
+	      _qp_attr (&ibdata);
+	    }
 	  exit (1);
 	}
 	
