@@ -82,13 +82,16 @@ struct server_ibdata {
 
   uint8_t            **bufs;
   size_t             bufsize;
+
+  struct ibv_sge     *ibv_sges;
+  struct ibv_recv_wr *ibv_recv_wrs;
 };
 
 #define RDMA_TIMEOUT  2000
 
 #define CQE_DEFAULT   100
 
-#define MAX_SEND_WR_DEFAULT  128
+#define MAX_SEND_WR_DEFAULT  1
 #define MAX_RECV_WR_DEFAULT  256
 #define MAX_SEND_SGE_DEFAULT 1
 #define MAX_RECV_SGE_DEFAULT 1
@@ -512,23 +515,21 @@ _millisecond_timeval_diff (struct timeval *start, struct timeval *end)
 static void
 _server_post_recv (struct server_ibdata *ibdata, uint64_t wr_id)
 {
-  struct ibv_sge sge;
-  struct ibv_recv_wr recv_wr;
   struct ibv_recv_wr *bad_wr;
   int err;
 
   assert (ibdata);
 
-  sge.addr = (uint64_t)ibdata->bufs[wr_id];
-  sge.length = ibdata->bufsize;
-  sge.lkey = ibdata->ibv_mrs[wr_id]->lkey;
+  ibdata->ibv_sges[wr_id].addr = (uint64_t)ibdata->bufs[wr_id];
+  ibdata->ibv_sges[wr_id].length = ibdata->bufsize;
+  ibdata->ibv_sges[wr_id].lkey = ibdata->ibv_mrs[wr_id]->lkey;
 	
-  recv_wr.wr_id = wr_id;
-  recv_wr.next = NULL;
-  recv_wr.sg_list = &sge;
-  recv_wr.num_sge = 1;
+  ibdata->ibv_recv_wrs[wr_id].wr_id = wr_id;
+  ibdata->ibv_recv_wrs[wr_id].next = NULL;
+  ibdata->ibv_recv_wrs[wr_id].sg_list = &ibdata->ibv_sges[wr_id];
+  ibdata->ibv_recv_wrs[wr_id].num_sge = 1;
   
-  if ((err = ibv_post_recv (ibdata->ibv_qp, &recv_wr, &bad_wr)))
+  if ((err = ibv_post_recv (ibdata->ibv_qp, &ibdata->ibv_recv_wrs[wr_id], &bad_wr)))
     {
       fprintf (stderr, "ibv_post_recv failed: %s\n", strerror (err));
       exit (1);
@@ -673,6 +674,18 @@ server_ibrc (void)
     {
       fprintf (stderr, "Server pre-accept QP info\n");
       _qp_info (ibdata.ibv_qp);
+    }
+
+  if (!(ibdata.ibv_sges = (struct ibv_sge *)malloc (sizeof (struct ibv_sge) * MAX_RECV_WR_DEFAULT)))
+    {
+      perror ("malloc");
+      exit (1);
+    }
+
+  if (!(ibdata.ibv_recv_wrs = (struct ibv_recv_wr *)malloc (sizeof (struct ibv_recv_wr) * MAX_RECV_WR_DEFAULT)))
+    {
+      perror ("malloc");
+      exit (1);
     }
 
   for (i = 0; i < MAX_RECV_WR_DEFAULT; i++)
@@ -833,4 +846,7 @@ server_ibrc (void)
     free (ibdata.bufs[i]);
 
   free (ibdata.bufs);
+
+  free (ibdata.ibv_sges);
+  free (ibdata.ibv_recv_wrs);
 }
