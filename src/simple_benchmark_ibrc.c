@@ -106,7 +106,45 @@ struct server_ibdata {
 #define SEND_WR_ID                  1
 
 static void
-_qp_attr (struct ibv_qp *ibv_qp)
+_device_info (struct ibv_context *ibv_context)
+{
+  struct ibv_device_attr device_attr;
+  int err;
+
+  assert (ibv_context);
+
+  if ((err = ibv_query_device (ibv_context, &device_attr)))
+    {
+      fprintf (stderr, "ibv_query_device failed: %s\n", strerror (err));
+      exit (1);
+    }
+
+  fprintf (stderr,
+	   " Device Info:\n"
+	   "   max mr size         : %llu\n"
+	   "   max qp              : %d\n"
+	   "   max qp wr           : %d\n"
+	   "   max cq              : %d\n"
+	   "   max cqe             : %d\n"
+	   "   max mr              : %d\n"
+	   "   max pd              : %d\n"
+	   "   local ca ack delay  : %u\n"
+	   "   phys port cnt       : %u\n"
+	   ,
+	   device_attr.max_mr_size,
+	   device_attr.max_qp,
+	   device_attr.max_qp_wr,
+	   device_attr.max_cq,
+	   device_attr.max_cqe,
+	   device_attr.max_mr,
+	   device_attr.max_pd,
+	   device_attr.local_ca_ack_delay,
+	   device_attr.phys_port_cnt
+	   );
+}
+
+static void
+_qp_info (struct ibv_qp *ibv_qp)
 {
   struct ibv_qp_attr attr;
   struct ibv_qp_init_attr init_attr;
@@ -126,9 +164,10 @@ _qp_attr (struct ibv_qp *ibv_qp)
     }
   
   fprintf (stderr,
-	   " QP query:\n"
+	   " QP Data:\n"
 	   "   qp num              : 0x%X\n"
 	   "   events completed    : %d\n"
+	   " QP Attr:\n"
 	   "   State               : %u\n"
 	   "   Cur State           : %u\n" 
 	   "   rq psn              : %d\n"
@@ -256,6 +295,8 @@ client_ibrc (void)
   /* ibv_context */
   ibdata.ibv_context = ibdata.cm_id->verbs;
 
+  _device_info (ibdata.ibv_context);
+
   if (!(ibdata.ibv_pd = ibv_alloc_pd (ibdata.ibv_context)))
     {
       fprintf (stderr, "ibv_alloc_pd failed\n");
@@ -317,7 +358,7 @@ client_ibrc (void)
   if (verbose > 1)
     {
       fprintf (stderr, "Client QP info\n");
-      _qp_attr (ibdata.ibv_qp);
+      _qp_info (ibdata.ibv_qp);
     }
 
   gettimeofday (&starttime, NULL);
@@ -378,7 +419,8 @@ client_ibrc (void)
 	  if (verbose > 1)
 	    {
 	      fprintf (stderr, "Client QP info\n");
-	      _qp_attr (ibdata.ibv_qp);
+	      _qp_info (ibdata.ibv_qp);
+	      _device_info (ibdata.ibv_context);
 	    }
 	  exit (1);
 	}
@@ -571,6 +613,8 @@ server_ibrc (void)
   /* ibv_context - from connected id*/
   ibdata.ibv_context = ibdata.cm_connected_id->verbs;
  
+  _device_info (ibdata.ibv_context);
+
   if (!(ibdata.ibv_pd = ibv_alloc_pd (ibdata.ibv_context)))
     {
       fprintf (stderr, "ibv_alloc_pd failed\n");
@@ -628,7 +672,7 @@ server_ibrc (void)
   if (verbose > 1)
     {
       fprintf (stderr, "Server pre-accept QP info\n");
-      _qp_attr (ibdata.ibv_qp);
+      _qp_info (ibdata.ibv_qp);
     }
 
   for (i = 0; i < MAX_RECV_WR_DEFAULT; i++)
@@ -650,7 +694,7 @@ server_ibrc (void)
   if (verbose > 1)
     {
       fprintf (stderr, "Server post-accept QP info\n");
-      _qp_attr (ibdata.ibv_qp);
+      _qp_info (ibdata.ibv_qp);
     }
 
   printf ("Accepted connection\n");
@@ -682,7 +726,7 @@ server_ibrc (void)
 	    if (verbose > 1)
 	      {
 		fprintf (stderr, "Server QP info\n");
-		_qp_attr (ibdata.ibv_qp);
+		_qp_info (ibdata.ibv_qp);
 	      }
 	    goto breakout;
 	  }
@@ -700,7 +744,7 @@ server_ibrc (void)
 	  if (verbose > 1)
 	    {
 	      fprintf (stderr, "Server QP info\n");
-	      _qp_attr (ibdata.ibv_qp);
+	      _qp_info (ibdata.ibv_qp);
 	    }
 	  exit (1);
 	}
@@ -716,13 +760,15 @@ server_ibrc (void)
       blocks_received++;
 	
       if (verbose > 1)
-	printf ("Received block %u (of %u) of size %u (seq = %u)\n",
+	printf ("Received block %u (of %u) of size %u (wr_id = %u, seq = %u)\n",
 		blocks_received,
 		blocks_to_receive,
 		ibdata.bufsize,
+		wc.wr_id,
 		*(unsigned int *)ibdata.bufs[wc.wr_id]);
       
-      if (check_data_correct (ibdata.bufs[wc.wr_id], ibdata.bufsize))
+      if (check_data_correct (ibdata.bufs[wc.wr_id] + sizeof (unsigned int),
+			      ibdata.bufsize - sizeof (unsigned int)))
 	printf ("Block %u has invalid data\n", blocks_received);
 
       /* put back WR that was taken out */
