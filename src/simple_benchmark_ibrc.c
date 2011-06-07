@@ -72,8 +72,8 @@ struct ibdata {
 
 #define CQE_DEFAULT   100
 
-#define MAX_SEND_WR_DEFAULT  300
-#define MAX_RECV_WR_DEFAULT  600
+#define MAX_SEND_WR_DEFAULT  128
+#define MAX_RECV_WR_DEFAULT  256
 #define MAX_SEND_SGE_DEFAULT 1
 #define MAX_RECV_SGE_DEFAULT 1
 
@@ -94,15 +94,16 @@ _qp_attr (struct ibdata *ibdata)
 {
   struct ibv_qp_attr attr;
   struct ibv_qp_init_attr init_attr;
-  
+  int err;
+
   memset (&attr, '\0', sizeof(attr));
   
-  if (ibv_query_qp (ibdata->ibv_qp,
-		    &attr,
-		    0xFFFFFFFF,
-		    &init_attr) < 0)
+  if ((err = ibv_query_qp (ibdata->ibv_qp,
+			   &attr,
+			   0xFFFFFFFF,
+			   &init_attr)))
     {
-      fprintf(stderr, "failed to query qp\n");
+      fprintf(stderr, "failed to query qp: %s\n", strerror (err));
       return;
     }
   
@@ -205,23 +206,25 @@ _init_ibv_data (struct ibdata *ibdata)
 static void
 _destroy_ibv_data (struct ibdata *ibdata)
 {
+  int err;
+
   assert (ibdata);
 
-  if (ibv_dealloc_pd (ibdata->ibv_pd) < 0)
+  if ((err = ibv_destroy_cq (ibdata->ibv_cq)))
     {
-      fprintf (stderr, "ibv_dealloc_pd failed\n");
+      fprintf (stderr, "ibv_destroy_cq failed: %s\n", strerror (err));
       exit (1);
     }
 
-  if (ibv_destroy_cq (ibdata->ibv_cq) < 0)
+  if ((err = ibv_dereg_mr (ibdata->ibv_mr)))
     {
-      fprintf (stderr, "ibv_destroy_cq failed\n");
+      fprintf (stderr, "ibv_dereg_mr failed: %s\n", strerror (err));
       exit (1);
     }
 
-  if (ibv_dereg_mr (ibdata->ibv_mr) < 0)
+  if ((err = ibv_dealloc_pd (ibdata->ibv_pd)))
     {
-      fprintf (stderr, "ibv_dereg_mr failed\n");
+      fprintf (stderr, "ibv_dealloc_pd failed: %s\n", strerror (err));
       exit (1);
     }
 }
@@ -349,7 +352,8 @@ client_ibrc (void)
       struct ibv_send_wr *bad_wr;
       struct ibv_wc wc;
       int wcs;
-      
+      int err;
+
       sge.addr = (uint64_t)ibdata.buf;
       sge.length = ibdata.bufsize;
       sge.lkey = ibdata.ibv_mr->lkey;
@@ -361,9 +365,12 @@ client_ibrc (void)
       send_wr.opcode = IBV_WR_SEND;
       send_wr.send_flags = IBV_SEND_SIGNALED;
       
-      if (ibv_post_send (ibdata.ibv_qp, &send_wr, &bad_wr) < 0)
+      /* Store sequence number into first bytes */
+      memcpy (ibdata.buf, &blocks_sent, sizeof (blocks_sent));
+
+      if ((err = ibv_post_send (ibdata.ibv_qp, &send_wr, &bad_wr)))
 	{
-	  fprintf (stderr, "ibv_post_send failed\n");
+	  fprintf (stderr, "ibv_post_send failed: %s\n", strerror (err));
 	  exit (1);
 	}
     
@@ -474,6 +481,7 @@ _server_post_recv (struct ibdata *ibdata, uint64_t wr_id)
   struct ibv_sge sge;
   struct ibv_recv_wr recv_wr;
   struct ibv_recv_wr *bad_wr;
+  int err;
 
   assert (ibdata);
 
@@ -486,9 +494,9 @@ _server_post_recv (struct ibdata *ibdata, uint64_t wr_id)
   recv_wr.sg_list = &sge;
   recv_wr.num_sge = 1;
   
-  if (ibv_post_recv (ibdata->ibv_qp, &recv_wr, &bad_wr) < 0)
+  if ((err = ibv_post_recv (ibdata->ibv_qp, &recv_wr, &bad_wr)))
     {
-      fprintf (stderr, "ibv_post_recv failed\n");
+      fprintf (stderr, "ibv_post_recv failed: %s\n", strerror (err));
       exit (1);
     }
 }
@@ -666,7 +674,11 @@ server_ibrc (void)
       blocks_received++;
 	
       if (verbose > 1)
-	printf ("Received block %u of size %u\n", blocks_received, ibdata.bufsize);
+	printf ("Received block %u (of %u) of size %u (seq = %u)\n",
+		blocks_received,
+		blocks_to_receive,
+		ibdata.bufsize,
+		*(unsigned int *)ibdata.buf);
       
       if (check_data_correct (ibdata.buf, ibdata.bufsize))
 	printf ("Block %u has invalid data\n", blocks_received);
