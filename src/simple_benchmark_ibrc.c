@@ -713,9 +713,6 @@ server_ibrc (void)
 	  exit (1);
 	}
 	
-      /* put back WR that was taken out */
-      _server_post_recv (&ibdata, wc.wr_id);
-
       blocks_received++;
 	
       if (verbose > 1)
@@ -727,6 +724,9 @@ server_ibrc (void)
       
       if (check_data_correct (ibdata.bufs[wc.wr_id], ibdata.bufsize))
 	printf ("Block %u has invalid data\n", blocks_received);
+
+      /* put back WR that was taken out */
+      _server_post_recv (&ibdata, wc.wr_id);
     }
 
  breakout:
