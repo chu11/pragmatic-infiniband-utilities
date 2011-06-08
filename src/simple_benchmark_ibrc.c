@@ -76,15 +76,15 @@ struct server_ibdata {
 
   struct ibv_context *ibv_context;
   struct ibv_pd      *ibv_pd;
-  struct ibv_mr      **ibv_mrs;
+  struct ibv_mr      *ibv_mr;
   struct ibv_cq      *ibv_cq;
   struct ibv_qp      *ibv_qp;
 
-  uint8_t            **bufs;
+  uint8_t            *buf;
   size_t             bufsize;
 
-  struct ibv_sge     *ibv_sges;
-  struct ibv_recv_wr *ibv_recv_wrs;
+  struct ibv_sge     ibv_sge;
+  struct ibv_recv_wr ibv_recv_wr;
 };
 
 #define RDMA_TIMEOUT  2000
@@ -106,7 +106,8 @@ struct server_ibdata {
 #define MICROSECONDS_IN_SECOND      1000000
 #define MICROSECONDS_IN_MILLISECOND 1000
 
-#define SEND_WR_ID                  1
+#define SEND_WR_ID                  0
+#define RECEIVE_WR_ID               1
 
 static void
 _device_info (struct ibv_context *ibv_context)
@@ -309,7 +310,7 @@ client_ibrc (void)
   if (!(ibdata.ibv_mr = ibv_reg_mr (ibdata.ibv_pd,
 				    ibdata.buf,
 				    ibdata.bufsize,
-				    IBV_ACCESS_LOCAL_WRITE)))
+				    IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE)))
     {
       fprintf (stderr, "ibv_reg_mr failed\n");
       exit (1);
@@ -423,7 +424,6 @@ client_ibrc (void)
 	    {
 	      fprintf (stderr, "Client QP info\n");
 	      _qp_info (ibdata.ibv_qp);
-	      _device_info (ibdata.ibv_context);
 	    }
 	  exit (1);
 	}
@@ -513,23 +513,23 @@ _millisecond_timeval_diff (struct timeval *start, struct timeval *end)
 }
 
 static void
-_server_post_recv (struct server_ibdata *ibdata, uint64_t wr_id)
+_server_post_recv (struct server_ibdata *ibdata)
 {
   struct ibv_recv_wr *bad_wr;
   int err;
 
   assert (ibdata);
 
-  ibdata->ibv_sges[wr_id].addr = (uint64_t)ibdata->bufs[wr_id];
-  ibdata->ibv_sges[wr_id].length = ibdata->bufsize;
-  ibdata->ibv_sges[wr_id].lkey = ibdata->ibv_mrs[wr_id]->lkey;
+  ibdata->ibv_sge.addr = (uint64_t)ibdata->buf;
+  ibdata->ibv_sge.length = ibdata->bufsize;
+  ibdata->ibv_sge.lkey = ibdata->ibv_mr->lkey;
 	
-  ibdata->ibv_recv_wrs[wr_id].wr_id = wr_id;
-  ibdata->ibv_recv_wrs[wr_id].next = NULL;
-  ibdata->ibv_recv_wrs[wr_id].sg_list = &ibdata->ibv_sges[wr_id];
-  ibdata->ibv_recv_wrs[wr_id].num_sge = 1;
+  ibdata->ibv_recv_wr.wr_id = RECEIVE_WR_ID;
+  ibdata->ibv_recv_wr.next = NULL;
+  ibdata->ibv_recv_wr.sg_list = &ibdata->ibv_sge;
+  ibdata->ibv_recv_wr.num_sge = 1;
   
-  if ((err = ibv_post_recv (ibdata->ibv_qp, &ibdata->ibv_recv_wrs[wr_id], &bad_wr)))
+  if ((err = ibv_post_recv (ibdata->ibv_qp, &ibdata->ibv_recv_wr, &bad_wr)))
     {
       fprintf (stderr, "ibv_post_recv failed: %s\n", strerror (err));
       exit (1);
@@ -602,14 +602,7 @@ server_ibrc (void)
 
   calc_blocks (&blocks_to_receive);
 
-  if (!(ibdata.bufs = (uint8_t **)malloc (sizeof (uint8_t *) * MAX_RECV_WR_DEFAULT)))
-    {
-      perror ("malloc");
-      exit (1);
-    }
-
-  for (i = 0; i < MAX_RECV_WR_DEFAULT; i++)
-    ibdata.bufs[i] = create_buf (ibdata.bufsize);
+  ibdata.buf = create_buf (ibdata.bufsize);
 
   /* ibv_context - from connected id*/
   ibdata.ibv_context = ibdata.cm_connected_id->verbs;
@@ -622,22 +615,13 @@ server_ibrc (void)
       exit (1);
     }
 
-  if (!(ibdata.ibv_mrs = (struct ibv_mr **)malloc (sizeof (struct ibv_mr *) * MAX_RECV_WR_DEFAULT)))
+  if (!(ibdata.ibv_mr = ibv_reg_mr (ibdata.ibv_pd,
+				    ibdata.buf,
+				    ibdata.bufsize,
+				    IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE)))
     {
-      perror ("malloc");
+      fprintf (stderr, "ibv_reg_mr failed\n");
       exit (1);
-    }
-
-  for (i = 0; i < MAX_RECV_WR_DEFAULT; i++)
-    {
-      if (!(ibdata.ibv_mrs[i] = ibv_reg_mr (ibdata.ibv_pd,
-					    ibdata.bufs[i],
-					    ibdata.bufsize,
-					    IBV_ACCESS_LOCAL_WRITE)))
-	{
-	  fprintf (stderr, "ibv_reg_mr failed\n");
-	  exit (1);
-	}
     }
 
   if (!(ibdata.ibv_cq = ibv_create_cq (ibdata.ibv_context,
@@ -676,20 +660,8 @@ server_ibrc (void)
       _qp_info (ibdata.ibv_qp);
     }
 
-  if (!(ibdata.ibv_sges = (struct ibv_sge *)malloc (sizeof (struct ibv_sge) * MAX_RECV_WR_DEFAULT)))
-    {
-      perror ("malloc");
-      exit (1);
-    }
-
-  if (!(ibdata.ibv_recv_wrs = (struct ibv_recv_wr *)malloc (sizeof (struct ibv_recv_wr) * MAX_RECV_WR_DEFAULT)))
-    {
-      perror ("malloc");
-      exit (1);
-    }
-
   for (i = 0; i < MAX_RECV_WR_DEFAULT; i++)
-    _server_post_recv (&ibdata, i);
+    _server_post_recv (&ibdata);
     
   ibdata.cm_conn_param.responder_resources = RESPONDER_RESOURCES_DEFAULT;
   ibdata.cm_conn_param.initiator_depth = INITIATOR_DEPTH_DEFAULT;
@@ -773,19 +745,18 @@ server_ibrc (void)
       blocks_received++;
 	
       if (verbose > 1)
-	printf ("Received block %u (of %u) of size %u (wr_id = %u, seq = %u)\n",
+	printf ("Received block %u (of %u) of size %u (seq = %u)\n",
 		blocks_received,
 		blocks_to_receive,
 		ibdata.bufsize,
-		wc.wr_id,
-		*(unsigned int *)ibdata.bufs[wc.wr_id]);
+		*(unsigned int *)ibdata.buf);
       
-      if (check_data_correct (ibdata.bufs[wc.wr_id] + sizeof (unsigned int),
+      if (check_data_correct (ibdata.buf + sizeof (unsigned int),
 			      ibdata.bufsize - sizeof (unsigned int)))
 	printf ("Block %u has invalid data\n", blocks_received);
 
       /* put back WR that was taken out */
-      _server_post_recv (&ibdata, wc.wr_id);
+      _server_post_recv (&ibdata);
     }
 
  breakout:
@@ -811,16 +782,11 @@ server_ibrc (void)
       exit (1);
     }
 
-  for (i = 0; i < MAX_RECV_WR_DEFAULT; i++)
+  if ((err = ibv_dereg_mr (ibdata.ibv_mr)))
     {
-      if ((err = ibv_dereg_mr (ibdata.ibv_mrs[i])))
-	{
-	  fprintf (stderr, "ibv_dereg_mr failed: %s\n", strerror (err));
-	  exit (1);
-	}
+      fprintf (stderr, "ibv_dereg_mr failed: %s\n", strerror (err));
+      exit (1);
     }
-
-  free (ibdata.ibv_mrs);
 
   if ((err = ibv_dealloc_pd (ibdata.ibv_pd)))
     {
@@ -842,11 +808,5 @@ server_ibrc (void)
 
   rdma_destroy_event_channel (ibdata.cm_event_channel);
 
-  for (i = 0; i < MAX_RECV_WR_DEFAULT; i++)
-    free (ibdata.bufs[i]);
-
-  free (ibdata.bufs);
-
-  free (ibdata.ibv_sges);
-  free (ibdata.ibv_recv_wrs);
+  free (ibdata.buf);
 }
