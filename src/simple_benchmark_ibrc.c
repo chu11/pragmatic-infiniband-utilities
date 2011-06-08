@@ -117,6 +117,8 @@ _device_info (struct ibv_context *ibv_context)
 
   assert (ibv_context);
 
+  memset (&device_attr, '\0', sizeof (device_attr));
+
   if ((err = ibv_query_device (ibv_context, &device_attr)))
     {
       fprintf (stderr, "ibv_query_device failed: %s\n", strerror (err));
@@ -156,7 +158,8 @@ _qp_info (struct ibv_qp *ibv_qp)
 
   assert (ibv_qp);
 
-  memset (&attr, '\0', sizeof(attr));
+  memset (&attr, '\0', sizeof (attr));
+  memset (&init_attr, '\0', sizeof (init_attr));
   
   if ((err = ibv_query_qp (ibv_qp,
 			   &attr,
@@ -253,6 +256,7 @@ client_ibrc (void)
   int err;
 
   memset (&ibdata, '\0', sizeof (ibdata));
+  memset (&qp_init_attr, '\0', sizeof (qp_init_attr));
 
   if (!(ibdata.cm_event_channel = rdma_create_event_channel()))
     {
@@ -374,6 +378,10 @@ client_ibrc (void)
       struct ibv_send_wr *bad_wr;
       struct ibv_wc wc;
       int wcs;
+
+      memset (&sge, '\0', sizeof (sge));
+      memset (&send_wr, '\0', sizeof (send_wr));
+      memset (&wc, '\0', sizeof (wc));
 
       sge.addr = (uint64_t)ibdata.buf;
       sge.length = ibdata.bufsize;
@@ -520,6 +528,9 @@ _server_post_recv (struct server_ibdata *ibdata)
 
   assert (ibdata);
 
+  memset (&ibdata->ibv_sge, '\0', sizeof (ibdata->ibv_sge));
+  memset (&ibdata->ibv_recv_wr, '\0', sizeof (ibdata->ibv_recv_wr));
+
   ibdata->ibv_sge.addr = (uint64_t)ibdata->buf;
   ibdata->ibv_sge.length = ibdata->bufsize;
   ibdata->ibv_sge.lkey = ibdata->ibv_mr->lkey;
@@ -549,6 +560,7 @@ server_ibrc (void)
   int err;
 
   memset (&ibdata, '\0', sizeof (ibdata));
+  memset (&qp_init_attr, '\0', sizeof (qp_init_attr));
 
   if (!(ibdata.cm_event_channel = rdma_create_event_channel()))
     {
@@ -691,6 +703,8 @@ server_ibrc (void)
       struct ibv_wc wc;
       int wcs;
       
+      memset (&wc, '\0', sizeof (wc));
+
       gettimeofday (&spinstart, NULL);
       
       do {
