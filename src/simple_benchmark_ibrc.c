@@ -68,29 +68,30 @@ struct client_ibdata {
   struct ibv_qp           *ibv_qp;
   struct ibv_qp_attr      ibv_qp_attr;
 
-  uint8_t            *buf;
-  size_t             bufsize;
+  uint8_t                 *buf;
+  size_t                  bufsize;
 
-  int                fd;
+  int                     fd;
 };
 
 struct server_ibdata {
-  struct rdma_event_channel *cm_event_channel;
-  struct rdma_cm_id         *cm_id;
-  struct rdma_cm_id         *cm_connected_id;
-  struct rdma_conn_param    cm_conn_param;
+  struct ibv_device       *ibv_device;
+  struct ibv_context      *ibv_context;
+  struct ibv_pd           *ibv_pd;
+  struct ibv_mr           *ibv_mr;
+  struct ibv_cq           *ibv_cq;
+  struct ibv_qp_init_attr ibv_qp_init_attr;
+  struct ibv_qp           *ibv_qp;
+  struct ibv_qp_attr      ibv_qp_attr;
 
-  struct ibv_context *ibv_context;
-  struct ibv_pd      *ibv_pd;
-  struct ibv_mr      *ibv_mr;
-  struct ibv_cq      *ibv_cq;
-  struct ibv_qp      *ibv_qp;
+  uint8_t                 *buf;
+  size_t                  bufsize;
 
-  uint8_t            *buf;
-  size_t             bufsize;
+  int                     listenfd;
+  int                     connectionfd;
 
-  struct ibv_sge     ibv_sge;
-  struct ibv_recv_wr ibv_recv_wr;
+  struct ibv_sge          ibv_sge;
+  struct ibv_recv_wr      ibv_recv_wr;
 };
 
 #define RDMA_TIMEOUT  2000
@@ -111,8 +112,6 @@ struct server_ibdata {
 #define TIMEOUT_DEFAULT             14
 #define RETRY_COUNT_DEFAULT         7
 #define RNR_RETRY_COUNT_DEFAULT     7
-
-#define BACKLOG_DEFAULT             0
 
 #define MICROSECONDS_IN_SECOND      1000000
 #define MICROSECONDS_IN_MILLISECOND 1000
@@ -304,7 +303,7 @@ client_ibrc (void)
   if (!(client_ibdata.ibv_mr = ibv_reg_mr (client_ibdata.ibv_pd,
 					   client_ibdata.buf,
 					   client_ibdata.bufsize,
-					   IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE)))
+					   IBV_ACCESS_LOCAL_WRITE)))
     {
       fprintf (stderr, "ibv_reg_mr failed\n");
       exit (1);
@@ -424,14 +423,20 @@ client_ibrc (void)
     _output_qpdata (&server_qpdata, "Server QP Data");
 
   /* sync with server to know when it's ready */
-  if (read (client_ibdata.fd,
-	    tmpbuf,
-	    1) < 0)
+  if ((len = read (client_ibdata.fd,
+		   tmpbuf,
+		   1)) < 0)
     {
       perror ("read");
       exit (1);
     }
   
+  if (len != 1)
+    {
+      fprintf (stderr, "Protocol mismatch\n");
+      exit (1);
+    }
+
   memset (&client_ibdata.ibv_qp_attr, '\0', sizeof (client_ibdata.ibv_qp_attr));
   client_ibdata.ibv_qp_attr.qp_state = IBV_QPS_RTR;
   client_ibdata.ibv_qp_attr.path_mtu = port_attr.active_mtu;
@@ -665,76 +670,54 @@ void
 server_ibrc (void)
 {
   struct server_ibdata server_ibdata;
-  struct sockaddr_in serveraddr;
-  struct rdma_cm_event *cm_connect_event;
+  struct ibv_device **ibv_device_list;
+  int num_devices;
   unsigned int blocks_received = 0;
   unsigned int blocks_to_receive = 0;
-  struct ibv_qp_init_attr qp_init_attr;
+  struct ibv_port_attr port_attr;
+  struct qpdata server_qpdata;
+  struct qpdata client_qpdata;
+  struct sockaddr_in serveraddr;
+  unsigned int optlen;
+  int optval;
   unsigned int i;
-  int err;
+  int total_len, desired_len, len, err;
+  uint8_t tmpbuf[TMPBUF_LEN];
 
   memset (&server_ibdata, '\0', sizeof (server_ibdata));
-  memset (&qp_init_attr, '\0', sizeof (qp_init_attr));
+  memset (&server_qpdata, '\0', sizeof (server_qpdata));
+  memset (&client_qpdata, '\0', sizeof (client_qpdata));
+  memset (&serveraddr, '\0', sizeof (serveraddr));
 
-  if (!(server_ibdata.cm_event_channel = rdma_create_event_channel()))
+  if (!(ibv_device_list = ibv_get_device_list (&num_devices)))
     {
-      fprintf (stderr, "rdma_create_event_channel failed\n");
-      exit (1);
-    }
-
-  if (rdma_create_id (server_ibdata.cm_event_channel,
-		      &server_ibdata.cm_id,
-		      NULL,
-		      RDMA_PS_TCP) < 0)
-    {
-      fprintf (stderr, "rdma_create_id failed\n");
-      exit (1);
-    }
-
-  setup_server_serveraddr (&serveraddr);
-
-  if (rdma_bind_addr (server_ibdata.cm_id, (struct sockaddr *)&serveraddr) < 0)
-    {
-      fprintf (stderr, "rdma_bind_addr failed\n");
-      exit (1);
-    }
-
-  printf ("Starting server listening\n");
-
-  if (rdma_listen (server_ibdata.cm_id, BACKLOG_DEFAULT) < 0)
-    {
-      fprintf (stderr, "rdma_listen failed\n");
-      exit (1);
-    }
-
-  if (rdma_get_cm_event (server_ibdata.cm_event_channel,
-			 &cm_connect_event) < 0)
-    {
-      fprintf (stderr, "rdma_get_cm_event failed\n");
+      perror ("ibv_get_device_list");
       exit (1);
     }
   
-  if (cm_connect_event->event != RDMA_CM_EVENT_CONNECT_REQUEST)
+  if (!num_devices)
     {
-      fprintf (stderr,
-	       "Received unexpected event %d, expected %d\n",
-	       cm_connect_event->event, RDMA_CM_EVENT_CONNECT_REQUEST);
+      fprintf (stderr, "No IB devices found\n");
       exit (1);
     }
   
-  server_ibdata.cm_connected_id = cm_connect_event->id;
+  server_ibdata.ibv_device = ibv_device_list[0];
+
+  if (!(server_ibdata.ibv_context = ibv_open_device (server_ibdata.ibv_device)))
+    {
+      /* Sets errno?? */
+      fprintf (stderr, "ibv_open_device: %s\n", strerror (errno));
+      exit (1);
+    }
+
+  _device_info (server_ibdata.ibv_context);
 
   calc_bufsize (&(server_ibdata.bufsize));
 
   calc_blocks (&blocks_to_receive);
-
+  
   server_ibdata.buf = create_buf (server_ibdata.bufsize);
-
-  /* ibv_context - from connected id*/
-  server_ibdata.ibv_context = server_ibdata.cm_connected_id->verbs;
- 
-  _device_info (server_ibdata.ibv_context);
-
+  
   if (!(server_ibdata.ibv_pd = ibv_alloc_pd (server_ibdata.ibv_context)))
     {
       fprintf (stderr, "ibv_alloc_pd failed\n");
@@ -742,66 +725,205 @@ server_ibrc (void)
     }
 
   if (!(server_ibdata.ibv_mr = ibv_reg_mr (server_ibdata.ibv_pd,
-				    server_ibdata.buf,
-				    server_ibdata.bufsize,
-				    IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE)))
+                                           server_ibdata.buf,
+                                           server_ibdata.bufsize,
+                                           IBV_ACCESS_LOCAL_WRITE)))
     {
       fprintf (stderr, "ibv_reg_mr failed\n");
       exit (1);
     }
-
+  
   if (!(server_ibdata.ibv_cq = ibv_create_cq (server_ibdata.ibv_context,
-				       CQE_DEFAULT,
-				       NULL,
-				       NULL,
-				       0)))
+                                              CQE_DEFAULT,
+                                              NULL,
+                                              NULL,
+                                              0)))
     {
       fprintf (stderr, "ibv_create_cq failed\n");
       exit (1);
     }
-
-  memset (&qp_init_attr, '\0', sizeof (qp_init_attr));
-  qp_init_attr.send_cq = server_ibdata.ibv_cq;
-  qp_init_attr.recv_cq = server_ibdata.ibv_cq;
-  qp_init_attr.cap.max_send_wr = MAX_SEND_WR_DEFAULT;
-  qp_init_attr.cap.max_recv_wr = MAX_RECV_WR_DEFAULT;
-  qp_init_attr.cap.max_send_sge = MAX_SEND_SGE_DEFAULT;
-  qp_init_attr.cap.max_recv_sge = MAX_RECV_SGE_DEFAULT;
-  qp_init_attr.cap.max_inline_data = 0;
-  qp_init_attr.sq_sig_all = 1;	/* generate CE for all WR */
-  qp_init_attr.qp_type = IBV_QPT_RC;
   
-  if (rdma_create_qp (server_ibdata.cm_connected_id, server_ibdata.ibv_pd, &qp_init_attr) < 0)
+  server_ibdata.ibv_qp_init_attr.send_cq = server_ibdata.ibv_cq;
+  server_ibdata.ibv_qp_init_attr.recv_cq = server_ibdata.ibv_cq;
+  server_ibdata.ibv_qp_init_attr.cap.max_send_wr = MAX_SEND_WR_DEFAULT;
+  server_ibdata.ibv_qp_init_attr.cap.max_recv_wr = MAX_RECV_WR_DEFAULT;
+  server_ibdata.ibv_qp_init_attr.cap.max_send_sge = MAX_SEND_SGE_DEFAULT;
+  server_ibdata.ibv_qp_init_attr.cap.max_recv_sge = MAX_RECV_SGE_DEFAULT;
+  server_ibdata.ibv_qp_init_attr.cap.max_inline_data = 0;
+  server_ibdata.ibv_qp_init_attr.sq_sig_all = 1;        /* generate CE for all WR */
+  server_ibdata.ibv_qp_init_attr.qp_type = IBV_QPT_RC;
+
+  if (!(server_ibdata.ibv_qp = ibv_create_qp (server_ibdata.ibv_pd,
+                                              &server_ibdata.ibv_qp_init_attr)))
     {
-      fprintf (stderr, "rdma_create_qp failed\n");
+      /* Sets errno?? */
+      fprintf (stderr, "ibv_create_qp: %s\n", strerror (errno));
       exit (1);
     }
   
-  /* ibv_qp - from connected id */
-  server_ibdata.ibv_qp = server_ibdata.cm_connected_id->qp;
+  memset (&server_ibdata.ibv_qp_attr, '\0', sizeof (server_ibdata.ibv_qp_attr));
+  server_ibdata.ibv_qp_attr.qp_state = IBV_QPS_INIT;
+  server_ibdata.ibv_qp_attr.pkey_index = PKEY_INDEX_DEFAULT;
+  server_ibdata.ibv_qp_attr.port_num = PORT_NUM_DEFAULT;
+  server_ibdata.ibv_qp_attr.qp_access_flags = 0;
+  
+  if ((err = ibv_modify_qp (server_ibdata.ibv_qp,
+                            &server_ibdata.ibv_qp_attr,
+                            IBV_QP_STATE
+                            | IBV_QP_PKEY_INDEX
+                            | IBV_QP_PORT
+                            | IBV_QP_ACCESS_FLAGS)))
+    {
+      fprintf (stderr, "ibv_modify_qp: %s\n", strerror (err));
+      exit (1);
+    }
+  
+  if ((err = ibv_query_port (server_ibdata.ibv_context,
+                             PORT_NUM_DEFAULT,
+                             &port_attr)))
+    {
+      fprintf (stderr, "ibv_query_port: %s\n", strerror (err));
+      exit (1);
+    }
 
+  server_qpdata.lid = port_attr.lid;
+  server_qpdata.qp_num = server_ibdata.ibv_qp->qp_num;
+  server_qpdata.psn = lrand48() & 0xFFFFFF;
+
+  if (verbose)
+    _output_qpdata (&server_qpdata, "Server QP Data");
+
+  setup_server_serveraddr (&serveraddr);
+  
+  if ((server_ibdata.listenfd = socket (AF_INET, SOCK_STREAM, 0)) < 0)
+    {
+      perror ("socket");
+      exit (1);
+    }
+
+  optval = 1;
+  optlen = sizeof (optval);
+
+  if (setsockopt (server_ibdata.listenfd,
+		  SOL_SOCKET,
+		  SO_REUSEADDR,
+		  &optval,
+		  optlen) < 0)
+    {
+      perror ("setsockopt");
+      exit (1);
+    }
+
+  if (bind (server_ibdata.listenfd,
+	    (struct sockaddr *)&serveraddr,
+	    sizeof (serveraddr)) < 0)
+    {
+      perror ("bind");
+      exit (1);
+    }
+
+  if (listen (server_ibdata.listenfd, LISTEN_BACKLOG_DEFAULT) < 0)
+    {
+      perror ("listen");
+      exit (1);
+    }
+
+  printf ("Starting server\n");
+  
+  if ((server_ibdata.connectionfd = accept (server_ibdata.listenfd,
+					    NULL,
+					    0)) < 0)
+    {
+      perror ("accept");
+      exit (1);
+    }
+
+  printf ("Accepted connection\n");
+
+  total_len = 0;
+  desired_len = sizeof (client_qpdata);
+
+  while (total_len < desired_len)
+    {
+      if ((len = read (server_ibdata.connectionfd,
+                       tmpbuf + total_len,
+                       desired_len - total_len)) < 0)
+        {
+          perror ("read");
+          exit (1);
+        }
+      total_len += len;
+    }
+  
+  memcpy (&client_qpdata, tmpbuf, desired_len);
+  
+  total_len = 0;
+  desired_len = sizeof (server_qpdata);
+
+  memcpy (tmpbuf, &server_qpdata, desired_len);
+
+  while (total_len < desired_len)
+    {
+      if ((len = write (server_ibdata.connectionfd,
+                        tmpbuf + total_len,
+                        desired_len - total_len)) < 0)
+        {
+          perror ("write");
+          exit (1);
+        }
+      total_len += len;
+    }
+  
   if (verbose > 1)
     _qp_info (server_ibdata.ibv_qp, "Server QP Info");
+
+  memset (&server_ibdata.ibv_qp_attr, '\0', sizeof (server_ibdata.ibv_qp_attr));
+  server_ibdata.ibv_qp_attr.qp_state = IBV_QPS_RTR;
+  server_ibdata.ibv_qp_attr.path_mtu = port_attr.active_mtu;
+  server_ibdata.ibv_qp_attr.dest_qp_num = client_qpdata.qp_num;
+  server_ibdata.ibv_qp_attr.rq_psn = client_qpdata.psn;
+  server_ibdata.ibv_qp_attr.max_dest_rd_atomic = MAX_DEST_RD_ATOMIC_DEFAULT;
+  server_ibdata.ibv_qp_attr.min_rnr_timer = MIN_RNR_TIMER_DEFAULT;
+  server_ibdata.ibv_qp_attr.ah_attr.dlid = client_qpdata.lid;
+  server_ibdata.ibv_qp_attr.ah_attr.is_global = 0;
+  server_ibdata.ibv_qp_attr.ah_attr.sl = SL_DEFAULT;
+  server_ibdata.ibv_qp_attr.ah_attr.src_path_bits = 0;
+  server_ibdata.ibv_qp_attr.ah_attr.port_num = PORT_NUM_DEFAULT;
+
+  if ((err = ibv_modify_qp (server_ibdata.ibv_qp,
+                            &server_ibdata.ibv_qp_attr,
+                            IBV_QP_STATE
+                            | IBV_QP_AV
+                            | IBV_QP_PATH_MTU
+                            | IBV_QP_DEST_QPN
+                            | IBV_QP_RQ_PSN
+                            | IBV_QP_MAX_DEST_RD_ATOMIC
+                            | IBV_QP_MIN_RNR_TIMER)))
+    {
+      fprintf (stderr, "ibv_modify_qp: %s\n", strerror (err));
+      exit (1);
+    }
 
   for (i = 0; i < MAX_RECV_WR_DEFAULT; i++)
     _server_post_recv (&server_ibdata);
-    
-  server_ibdata.cm_conn_param.responder_resources = 1;
-  server_ibdata.cm_conn_param.initiator_depth = 1;
-  server_ibdata.cm_conn_param.retry_count = RETRY_COUNT_DEFAULT;
-  server_ibdata.cm_conn_param.rnr_retry_count = RNR_RETRY_COUNT_DEFAULT;
-  
-  if (rdma_accept (server_ibdata.cm_connected_id, &server_ibdata.cm_conn_param) < 0)
+
+  /* sync with client to know when server is ready */
+  if ((len = write (server_ibdata.connectionfd,
+		    "a",
+		    1)) < 0)
     {
-      fprintf (stderr, "rdma_accept failed\n");
+      perror ("write");
       exit (1);
     }
-    
-  if (verbose > 1)
-    _qp_info (server_ibdata.ibv_qp, "Server QP Info");
 
-  printf ("Accepted connection\n");
-  
+  if (len != 1)
+    {
+      fprintf (stderr, "Failed write\n");
+      exit (1);
+    }
+   
+  printf ("Ready to receive data\n");
+
   while (blocks_received < blocks_to_receive)
     {
       struct timeval spinstart;
@@ -882,13 +1004,11 @@ server_ibrc (void)
   printf ("Total received %llu bytes\n",
           (uint64_t)blocks_received * server_ibdata.bufsize);
 
-  if (rdma_ack_cm_event (cm_connect_event) < 0)
+  if ((err = ibv_destroy_qp (server_ibdata.ibv_qp)))
     {
-      fprintf (stderr, "rdma_ack_cm_event failed\n");
+      fprintf (stderr, "ibv_destroy_qp: %s\n", strerror (err));
       exit (1);
     }
-
-  rdma_destroy_qp (server_ibdata.cm_connected_id);
 
   if ((err = ibv_destroy_cq (server_ibdata.ibv_cq)))
     {
@@ -907,20 +1027,27 @@ server_ibrc (void)
       fprintf (stderr, "ibv_dealloc_pd: %s\n", strerror (err));
       exit (1);
     }
-
-  if (rdma_destroy_id (server_ibdata.cm_id) < 0)
+  
+  if (ibv_close_device (server_ibdata.ibv_context) < 0)
     {
-      fprintf (stderr, "rdma_destroy_id failed\n");
+      /* Sets errno?? */
+      fprintf (stderr, "ibv_close_device: %s\n", strerror (errno));
       exit (1);
     }
 
-  if (rdma_destroy_id (server_ibdata.cm_connected_id) < 0)
-    {
-      fprintf (stderr, "rdma_destroy_id failed\n");
-      exit (1);
-    }
-
-  rdma_destroy_event_channel (server_ibdata.cm_event_channel);
+  ibv_free_device_list (ibv_device_list);
 
   free (server_ibdata.buf);
+
+  if (close (server_ibdata.listenfd) < 0)
+    {
+      perror ("close");
+      exit (1);
+    }
+
+  if (close (server_ibdata.connectionfd) < 0)
+    {
+      perror ("close");
+      exit (1);
+    }
 }
