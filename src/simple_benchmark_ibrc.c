@@ -94,12 +94,8 @@ struct server_ibdata {
   struct ibv_recv_wr      ibv_recv_wr;
 };
 
-#define RDMA_TIMEOUT  2000
-
-#define CQE_DEFAULT   100
-
-#define MAX_SEND_WR_DEFAULT  1
-#define MAX_RECV_WR_DEFAULT  256
+#define MAX_SEND_WR_DEFAULT  300
+#define MAX_RECV_WR_DEFAULT  600
 #define MAX_SEND_SGE_DEFAULT 1
 #define MAX_RECV_SGE_DEFAULT 1
 
@@ -310,7 +306,7 @@ client_ibrc (void)
     }
   
   if (!(client_ibdata.ibv_cq = ibv_create_cq (client_ibdata.ibv_context,
-					      CQE_DEFAULT,
+					      MAX_SEND_WR_DEFAULT,
 					      NULL,
 					      NULL,
 					      0)))
@@ -734,7 +730,7 @@ server_ibrc (void)
     }
   
   if (!(server_ibdata.ibv_cq = ibv_create_cq (server_ibdata.ibv_context,
-                                              CQE_DEFAULT,
+                                              MAX_RECV_WR_DEFAULT,
                                               NULL,
                                               NULL,
                                               0)))
