@@ -422,21 +422,6 @@ client_ibrc (void)
   if (verbose)
     _output_qpdata (&server_qpdata, "Server QP Data");
 
-  /* sync with server to know when it's ready */
-  if ((len = read (client_ibdata.fd,
-		   tmpbuf,
-		   1)) < 0)
-    {
-      perror ("read");
-      exit (1);
-    }
-  
-  if (len != 1)
-    {
-      fprintf (stderr, "Protocol mismatch\n");
-      exit (1);
-    }
-
   memset (&client_ibdata.ibv_qp_attr, '\0', sizeof (client_ibdata.ibv_qp_attr));
   client_ibdata.ibv_qp_attr.qp_state = IBV_QPS_RTR;
   client_ibdata.ibv_qp_attr.path_mtu = port_attr.active_mtu;
@@ -487,6 +472,21 @@ client_ibrc (void)
   
   if (verbose > 1)
     _qp_info (client_ibdata.ibv_qp, "Client QP Info");
+
+  /* sync with server to know when it's ready */
+  if ((len = read (client_ibdata.fd,
+		   tmpbuf,
+		   1)) < 0)
+    {
+      perror ("read");
+      exit (1);
+    }
+  
+  if (len != 1)
+    {
+      fprintf (stderr, "Protocol mismatch\n");
+      exit (1);
+    }
 
   gettimeofday (&starttime, NULL);
 
@@ -857,6 +857,9 @@ server_ibrc (void)
   
   memcpy (&client_qpdata, tmpbuf, desired_len);
   
+  if (verbose)
+    _output_qpdata (&client_qpdata, "Client QP Data");
+
   total_len = 0;
   desired_len = sizeof (server_qpdata);
 
