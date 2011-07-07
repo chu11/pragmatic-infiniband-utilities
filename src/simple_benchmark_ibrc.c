@@ -41,11 +41,11 @@
 #include <errno.h>
 #include <assert.h>
 
+#include <infiniband/verbs.h>
+
 #include "simple_benchmark.h"
 #include "simple_benchmark_common.h"
 #include "simple_benchmark_ibrc.h"
-
-#include <infiniband/verbs.h>
 
 extern benchmark_test_type_t benchmark_test_type;
 extern unsigned int sessiontimeout;
@@ -117,113 +117,6 @@ struct server_ibdata {
 #define TMPBUF_LEN                  1024
 
 static void
-_device_info (struct ibv_context *ibv_context)
-{
-  struct ibv_device_attr device_attr;
-  int err;
-
-  assert (ibv_context);
-
-  memset (&device_attr, '\0', sizeof (device_attr));
-
-  if ((err = ibv_query_device (ibv_context, &device_attr)))
-    {
-      fprintf (stderr, "ibv_query_device: %s\n", strerror (err));
-      exit (1);
-    }
-
-  fprintf (stderr,
-	   " Device Info:\n"
-	   "   max mr size         : %llu\n"
-	   "   max qp              : %d\n"
-	   "   max qp wr           : %d\n"
-	   "   max cq              : %d\n"
-	   "   max cqe             : %d\n"
-	   "   max mr              : %d\n"
-	   "   max pd              : %d\n"
-	   "   local ca ack delay  : %u\n"
-	   "   phys port cnt       : %u\n"
-	   ,
-	   device_attr.max_mr_size,
-	   device_attr.max_qp,
-	   device_attr.max_qp_wr,
-	   device_attr.max_cq,
-	   device_attr.max_cqe,
-	   device_attr.max_mr,
-	   device_attr.max_pd,
-	   device_attr.local_ca_ack_delay,
-	   device_attr.phys_port_cnt
-	   );
-}
-
-static void
-_qp_info (struct ibv_qp *ibv_qp, const char *str)
-{
-  struct ibv_qp_attr attr;
-  struct ibv_qp_init_attr init_attr;
-  int err;
-
-  assert (ibv_qp);
-  assert (str);
-
-  memset (&attr, '\0', sizeof (attr));
-  memset (&init_attr, '\0', sizeof (init_attr));
-  
-  if ((err = ibv_query_qp (ibv_qp,
-			   &attr,
-			   0xFFFFFFFF,
-			   &init_attr)))
-    {
-      fprintf(stderr, "ibv_query_qp: %s\n", strerror (err));
-      return;
-    }
-  
-  fprintf (stderr,
-	   " %s\n"
-	   " QP Data:\n"
-	   "   qp num              : 0x%X\n"
-	   "   events completed    : %d\n"
-	   " QP Attr:\n"
-	   "   State               : %u\n"
-	   "   Cur State           : %u\n" 
-	   "   rq psn              : %d\n"
-	   "   sq psn              : %d\n"
-	   "   dest qp num         : 0x%X\n"
-	   "   cap.max send wr     : %d\n"
-	   "   cap.max recv wr     : %d\n"
-	   "   cap.max send sge    : %d\n"
-	   "   cap.max recv sge    : %d\n"
-	   "   cap.max inline data : %d\n"
-	   "   sq draining         : %d\n"
-	   "   min_rnr_timer       : %d\n"
-	   "   port num            : %d\n"
-	   "   timeout             : %d\n"
-	   "   retry_cnt           : %u\n"
-	   "   rnr retry           : %d\n"
-	   ,
-	   str,
-	   ibv_qp->qp_num,
-	   ibv_qp->events_completed,
-	   attr.qp_state,
-	   attr.cur_qp_state,
-	   attr.rq_psn,
-	   attr.sq_psn,
-	   attr.dest_qp_num,
-	   attr.cap.max_send_wr,
-	   attr.cap.max_recv_wr,
-	   attr.cap.max_send_sge,
-	   attr.cap.max_recv_sge,
-	   attr.cap.max_inline_data,
-	   attr.sq_draining,
-	   attr.min_rnr_timer,
-	   attr.port_num,
-	   attr.timeout,
-	   attr.retry_cnt,
-	   attr.rnr_retry
-	   );
-}
-
-static void
 _output_qpdata (struct qpdata *qpdata, const char *str)
 {
   assert (qpdata);
@@ -281,7 +174,7 @@ client_ibrc (void)
       exit (1);
     }
 
-  _device_info (client_ibdata.ibv_context);
+  device_info (client_ibdata.ibv_context);
 
   calc_bufsize (&(client_ibdata.bufsize));
 
@@ -466,7 +359,7 @@ client_ibrc (void)
     }
   
   if (verbose > 1)
-    _qp_info (client_ibdata.ibv_qp, "Client QP Info");
+    qp_info (client_ibdata.ibv_qp, "Client QP Info", stdout);
 
   /* sync with server to know when it's ready */
   if ((len = read (client_ibdata.fd,
@@ -543,7 +436,7 @@ client_ibrc (void)
 	{
 	  fprintf (stderr, "Bad wc status %u\n", wc.status);
 	  if (verbose > 1)
-	    _qp_info (client_ibdata.ibv_qp, "Client QP Info");
+	    qp_info (client_ibdata.ibv_qp, "Client QP Info", stderr);
 	  exit (1);
 	}
       
@@ -705,7 +598,7 @@ server_ibrc (void)
       exit (1);
     }
 
-  _device_info (server_ibdata.ibv_context);
+  device_info (server_ibdata.ibv_context);
 
   calc_bufsize (&(server_ibdata.bufsize));
 
@@ -873,7 +766,7 @@ server_ibrc (void)
     }
   
   if (verbose > 1)
-    _qp_info (server_ibdata.ibv_qp, "Server QP Info");
+    qp_info (server_ibdata.ibv_qp, "Server QP Info", stdout);
 
   memset (&server_ibdata.ibv_qp_attr, '\0', sizeof (server_ibdata.ibv_qp_attr));
   server_ibdata.ibv_qp_attr.qp_state = IBV_QPS_RTR;
@@ -949,7 +842,7 @@ server_ibrc (void)
 	  {
 	    fprintf (stderr, "Server timeout\n");
 	    if (verbose > 1)
-	      _qp_info (server_ibdata.ibv_qp, "Server QP Info");
+	      qp_info (server_ibdata.ibv_qp, "Server QP Info", stderr);
 	    goto breakout;
 	  }
       } while (!wcs);
@@ -964,7 +857,7 @@ server_ibrc (void)
 	{
 	  fprintf (stderr, "Bad wc status %u\n", wc.status);
 	  if (verbose > 1)
-	    _qp_info (server_ibdata.ibv_qp, "Server QP Info");
+	    qp_info (server_ibdata.ibv_qp, "Server QP Info", stderr);
 	  exit (1);
 	}
 	

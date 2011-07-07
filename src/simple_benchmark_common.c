@@ -216,3 +216,110 @@ check_data_correct (const uint8_t *buf, size_t bufsize)
 
   return (0);
 }
+
+void
+device_info (struct ibv_context *ibv_context)
+{
+  struct ibv_device_attr device_attr;
+  int err;
+
+  assert (ibv_context);
+
+  memset (&device_attr, '\0', sizeof (device_attr));
+
+  if ((err = ibv_query_device (ibv_context, &device_attr)))
+    {
+      fprintf (stderr, "ibv_query_device: %s\n", strerror (err));
+      exit (1);
+    }
+
+  printf (" Device Info:\n"
+	  "   max mr size         : %llu\n"
+	  "   max qp              : %d\n"
+	  "   max qp wr           : %d\n"
+	  "   max cq              : %d\n"
+	  "   max cqe             : %d\n"
+	  "   max mr              : %d\n"
+	  "   max pd              : %d\n"
+	  "   local ca ack delay  : %u\n"
+	  "   phys port cnt       : %u\n"
+	  ,
+	  device_attr.max_mr_size,
+	  device_attr.max_qp,
+	  device_attr.max_qp_wr,
+	  device_attr.max_cq,
+	  device_attr.max_cqe,
+	  device_attr.max_mr,
+	  device_attr.max_pd,
+	  device_attr.local_ca_ack_delay,
+	  device_attr.phys_port_cnt
+	  );
+}
+
+void
+qp_info (struct ibv_qp *ibv_qp, const char *str, FILE *stream)
+{
+  struct ibv_qp_attr attr;
+  struct ibv_qp_init_attr init_attr;
+  int err;
+
+  assert (ibv_qp);
+  assert (str);
+  assert (stream);
+
+  memset (&attr, '\0', sizeof (attr));
+  memset (&init_attr, '\0', sizeof (init_attr));
+  
+  if ((err = ibv_query_qp (ibv_qp,
+			   &attr,
+			   0xFFFFFFFF,
+			   &init_attr)))
+    {
+      fprintf(stderr, "ibv_query_qp: %s\n", strerror (err));
+      return;
+    }
+  
+  fprintf (stream,
+	   " %s\n"
+	   " QP Data:\n"
+	   "   qp num              : 0x%X\n"
+	   "   events completed    : %d\n"
+	   " QP Attr:\n"
+	   "   State               : %u\n"
+	   "   Cur State           : %u\n" 
+	   "   rq psn              : %d\n"
+	   "   sq psn              : %d\n"
+	   "   dest qp num         : 0x%X\n"
+	   "   cap.max send wr     : %d\n"
+	   "   cap.max recv wr     : %d\n"
+	   "   cap.max send sge    : %d\n"
+	   "   cap.max recv sge    : %d\n"
+	   "   cap.max inline data : %d\n"
+	   "   sq draining         : %d\n"
+	   "   min_rnr_timer       : %d\n"
+	   "   port num            : %d\n"
+	   "   timeout             : %d\n"
+	   "   retry_cnt           : %u\n"
+	   "   rnr retry           : %d\n"
+	   ,
+	   str,
+	   ibv_qp->qp_num,
+	   ibv_qp->events_completed,
+	   attr.qp_state,
+	   attr.cur_qp_state,
+	   attr.rq_psn,
+	   attr.sq_psn,
+	   attr.dest_qp_num,
+	   attr.cap.max_send_wr,
+	   attr.cap.max_recv_wr,
+	   attr.cap.max_send_sge,
+	   attr.cap.max_recv_sge,
+	   attr.cap.max_inline_data,
+	   attr.sq_draining,
+	   attr.min_rnr_timer,
+	   attr.port_num,
+	   attr.timeout,
+	   attr.retry_cnt,
+	   attr.rnr_retry
+	   );
+}

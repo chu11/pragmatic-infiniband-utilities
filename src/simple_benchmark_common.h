@@ -33,6 +33,8 @@
 #include <sys/time.h>
 #include <sys/types.h>
 
+#include <infiniband/verbs.h>
+
 void gethostbyname_r_common (struct hostent *hent);
 
 void calc_bufsize (size_t *bufsize);
@@ -48,5 +50,9 @@ void setup_server_serveraddr (struct sockaddr_in *serveraddr);
 void elapsed_time_output (struct timeval *starttime, struct timeval *endtime);
 
 int check_data_correct (const uint8_t *buf, size_t bufsize);
+
+void device_info (struct ibv_context *ibv_context);
+
+void qp_info (struct ibv_qp *ibv_qp, const char *str, FILE *stream);
 
 #endif /* _SIMPLE_BENCHMARK_COMMON_H */
