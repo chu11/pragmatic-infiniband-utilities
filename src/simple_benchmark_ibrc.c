@@ -45,7 +45,6 @@
 #include "simple_benchmark_common.h"
 #include "simple_benchmark_ibrc.h"
 
-#include <rdma/rdma_cma.h>
 #include <infiniband/verbs.h>
 
 extern benchmark_test_type_t benchmark_test_type;
