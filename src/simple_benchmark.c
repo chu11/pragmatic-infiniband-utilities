@@ -36,7 +36,6 @@
 #include "simple_benchmark_tcp.h"
 #include "simple_benchmark_udp.h"
 #include "simple_benchmark_ibrc.h"
-#include "simple_benchmark_ibud.h"
 #include "simple_benchmark_ibrdma.h"
 
 /* Notes:
@@ -294,12 +293,6 @@ main (int argc, char *argv[])
 	client_ibrc ();
       else
 	server_ibrc ();
-      break;
-    case BENCHMARK_TEST_TYPE_IBUD:
-      if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
-	client_ibud ();
-      else
-	server_ibud ();
       break;
     case BENCHMARK_TEST_TYPE_IBRDMA:
       if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
