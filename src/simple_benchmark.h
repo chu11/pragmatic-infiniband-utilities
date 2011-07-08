@@ -48,7 +48,7 @@
 
 #define GETOPTARGS  "CSTUH:b:t:r:s:p:vh";
 
-#define BLOCKSIZE_DEFAULT             4
+#define BLOCKSIZE_DEFAULT             64
 #define TRANSFERSIZE_DEFAULT          4096
 #define RETRANSMISSIONTIMEOUT_DEFAULT 1000
 #define SESSIONTIMEOUT_DEFAULT        60000
