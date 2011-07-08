@@ -107,7 +107,7 @@ am_src_simple_benchmark_OBJECTS =  \
 	src_simple_benchmark-simple_benchmark_udp.$(OBJEXT) \
 	src_simple_benchmark-simple_benchmark_ibrc.$(OBJEXT) \
 	src_simple_benchmark-simple_benchmark_ibud.$(OBJEXT) \
-	src_simple_benchmark-simple_benchmark_rdmarc.$(OBJEXT)
+	src_simple_benchmark-simple_benchmark_ibrdma.$(OBJEXT)
 src_simple_benchmark_OBJECTS = $(am_src_simple_benchmark_OBJECTS)
 src_simple_benchmark_LDADD = $(LDADD)
 src_simple_benchmark_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -356,9 +356,9 @@ src_simple_benchmark_SOURCES = src/simple_benchmark.c \
 				src/simple_benchmark_udp.c \
 				src/simple_benchmark_ibrc.c \
 				src/simple_benchmark_ibud.c \
-				src/simple_benchmark_rdmarc.c
+				src/simple_benchmark_ibrdma.c
 
-src_simple_benchmark_CFLAGS = -DOSM_VENDOR_INTF_OPENIB -D_GNU_SOURCE -O2
+src_simple_benchmark_CFLAGS = -DOSM_VENDOR_INTF_OPENIB
 src_simple_benchmark_LDFLAGS = -libverbs
 EXTRA_DIST = \
 	META \
@@ -562,8 +562,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/src_simple_benchmark-simple_benchmark.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/src_simple_benchmark-simple_benchmark_common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/src_simple_benchmark-simple_benchmark_ibrc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/src_simple_benchmark-simple_benchmark_ibrdma.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/src_simple_benchmark-simple_benchmark_ibud.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/src_simple_benchmark-simple_benchmark_rdmarc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/src_simple_benchmark-simple_benchmark_tcp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/src_simple_benchmark-simple_benchmark_udp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/src_simple_rdma-simple_rdma.Po@am__quote@
@@ -715,19 +715,19 @@ src_simple_benchmark-simple_benchmark_ibud.obj: src/simple_benchmark_ibud.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(src_simple_benchmark_CFLAGS) $(CFLAGS) -c -o src_simple_benchmark-simple_benchmark_ibud.obj `if test -f 'src/simple_benchmark_ibud.c'; then $(CYGPATH_W) 'src/simple_benchmark_ibud.c'; else $(CYGPATH_W) '$(srcdir)/src/simple_benchmark_ibud.c'; fi`
 
-src_simple_benchmark-simple_benchmark_rdmarc.o: src/simple_benchmark_rdmarc.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(src_simple_benchmark_CFLAGS) $(CFLAGS) -MT src_simple_benchmark-simple_benchmark_rdmarc.o -MD -MP -MF $(DEPDIR)/src_simple_benchmark-simple_benchmark_rdmarc.Tpo -c -o src_simple_benchmark-simple_benchmark_rdmarc.o `test -f 'src/simple_benchmark_rdmarc.c' || echo '$(srcdir)/'`src/simple_benchmark_rdmarc.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/src_simple_benchmark-simple_benchmark_rdmarc.Tpo $(DEPDIR)/src_simple_benchmark-simple_benchmark_rdmarc.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src/simple_benchmark_rdmarc.c' object='src_simple_benchmark-simple_benchmark_rdmarc.o' libtool=no @AMDEPBACKSLASH@
+src_simple_benchmark-simple_benchmark_ibrdma.o: src/simple_benchmark_ibrdma.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(src_simple_benchmark_CFLAGS) $(CFLAGS) -MT src_simple_benchmark-simple_benchmark_ibrdma.o -MD -MP -MF $(DEPDIR)/src_simple_benchmark-simple_benchmark_ibrdma.Tpo -c -o src_simple_benchmark-simple_benchmark_ibrdma.o `test -f 'src/simple_benchmark_ibrdma.c' || echo '$(srcdir)/'`src/simple_benchmark_ibrdma.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/src_simple_benchmark-simple_benchmark_ibrdma.Tpo $(DEPDIR)/src_simple_benchmark-simple_benchmark_ibrdma.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src/simple_benchmark_ibrdma.c' object='src_simple_benchmark-simple_benchmark_ibrdma.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(src_simple_benchmark_CFLAGS) $(CFLAGS) -c -o src_simple_benchmark-simple_benchmark_rdmarc.o `test -f 'src/simple_benchmark_rdmarc.c' || echo '$(srcdir)/'`src/simple_benchmark_rdmarc.c
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(src_simple_benchmark_CFLAGS) $(CFLAGS) -c -o src_simple_benchmark-simple_benchmark_ibrdma.o `test -f 'src/simple_benchmark_ibrdma.c' || echo '$(srcdir)/'`src/simple_benchmark_ibrdma.c
 
-src_simple_benchmark-simple_benchmark_rdmarc.obj: src/simple_benchmark_rdmarc.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(src_simple_benchmark_CFLAGS) $(CFLAGS) -MT src_simple_benchmark-simple_benchmark_rdmarc.obj -MD -MP -MF $(DEPDIR)/src_simple_benchmark-simple_benchmark_rdmarc.Tpo -c -o src_simple_benchmark-simple_benchmark_rdmarc.obj `if test -f 'src/simple_benchmark_rdmarc.c'; then $(CYGPATH_W) 'src/simple_benchmark_rdmarc.c'; else $(CYGPATH_W) '$(srcdir)/src/simple_benchmark_rdmarc.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/src_simple_benchmark-simple_benchmark_rdmarc.Tpo $(DEPDIR)/src_simple_benchmark-simple_benchmark_rdmarc.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src/simple_benchmark_rdmarc.c' object='src_simple_benchmark-simple_benchmark_rdmarc.obj' libtool=no @AMDEPBACKSLASH@
+src_simple_benchmark-simple_benchmark_ibrdma.obj: src/simple_benchmark_ibrdma.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(src_simple_benchmark_CFLAGS) $(CFLAGS) -MT src_simple_benchmark-simple_benchmark_ibrdma.obj -MD -MP -MF $(DEPDIR)/src_simple_benchmark-simple_benchmark_ibrdma.Tpo -c -o src_simple_benchmark-simple_benchmark_ibrdma.obj `if test -f 'src/simple_benchmark_ibrdma.c'; then $(CYGPATH_W) 'src/simple_benchmark_ibrdma.c'; else $(CYGPATH_W) '$(srcdir)/src/simple_benchmark_ibrdma.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/src_simple_benchmark-simple_benchmark_ibrdma.Tpo $(DEPDIR)/src_simple_benchmark-simple_benchmark_ibrdma.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src/simple_benchmark_ibrdma.c' object='src_simple_benchmark-simple_benchmark_ibrdma.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(src_simple_benchmark_CFLAGS) $(CFLAGS) -c -o src_simple_benchmark-simple_benchmark_rdmarc.obj `if test -f 'src/simple_benchmark_rdmarc.c'; then $(CYGPATH_W) 'src/simple_benchmark_rdmarc.c'; else $(CYGPATH_W) '$(srcdir)/src/simple_benchmark_rdmarc.c'; fi`
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(src_simple_benchmark_CFLAGS) $(CFLAGS) -c -o src_simple_benchmark-simple_benchmark_ibrdma.obj `if test -f 'src/simple_benchmark_ibrdma.c'; then $(CYGPATH_W) 'src/simple_benchmark_ibrdma.c'; else $(CYGPATH_W) '$(srcdir)/src/simple_benchmark_ibrdma.c'; fi`
 
 src_simple_rdma-simple_rdma.o: src/simple_rdma.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(src_simple_rdma_CFLAGS) $(CFLAGS) -MT src_simple_rdma-simple_rdma.o -MD -MP -MF $(DEPDIR)/src_simple_rdma-simple_rdma.Tpo -c -o src_simple_rdma-simple_rdma.o `test -f 'src/simple_rdma.c' || echo '$(srcdir)/'`src/simple_rdma.c

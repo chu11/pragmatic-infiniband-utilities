@@ -279,10 +279,10 @@ client_ibrdma (void)
     }
   
   if (!cm_connect_event->param.conn.private_data
-      || cm_connect_event->param.conn.private_data_len != sizeof (server_remote_address))
+      || cm_connect_event->param.conn.private_data_len < sizeof (server_remote_address))
     {
       fprintf (stderr,
-	       "Invalid private data received from server: ptr = %p, size = %u, expected = %u\n",
+	       "Invalid private data received from server: ptr = %p, size = %u, expected >= %u\n",
 	       cm_connect_event->param.conn.private_data,
 	       cm_connect_event->param.conn.private_data_len,
 	       sizeof (server_remote_address));
@@ -291,7 +291,7 @@ client_ibrdma (void)
 
   memcpy (&server_remote_address,
 	  cm_connect_event->param.conn.private_data,
-	  cm_connect_event->param.conn.private_data_len);
+	  sizeof (server_remote_address));
 
   if (verbose)
     {
@@ -302,6 +302,7 @@ client_ibrdma (void)
   if (rdma_ack_cm_event (cm_connect_event) < 0)
     {
       fprintf (stderr, "rdma_ack_cm_event failed\n");
+      perror ("rdma_ack_cm_event");
       exit (1);
     }
 
@@ -355,11 +356,11 @@ client_ibrdma (void)
 	  exit (1);
 	}
       
-      if (wc.wr_id != IBV_WR_RDMA_WRITE)
+      if (wc.wr_id != RDMA_WRITE_WR_ID)
 	{
 	  fprintf (stderr,
 		   "Unexpected wr id %u, expected %u\n",
-		   wc.wr_id, IBV_WR_RDMA_WRITE);
+		   wc.wr_id, RDMA_WRITE_WR_ID);
 	  exit (1);
 	}
       
@@ -371,11 +372,11 @@ client_ibrdma (void)
 	  exit (1);
 	}
       
-      if (wc.opcode != IBV_WC_SEND)
+      if (wc.opcode != IBV_WC_RDMA_WRITE)
 	{
 	  fprintf (stderr,
 		   "Unexpected wc opcode %u, expected %u\n",
-		   wc.opcode, IBV_WC_SEND);
+		   wc.opcode, IBV_WC_RDMA_WRITE);
 	  exit (1);
 	}
       
@@ -532,6 +533,8 @@ server_ibrdma (void)
   struct ibv_sge sge;
   struct ibv_recv_wr recv_wr;
   struct ibv_recv_wr *bad_wr;
+  struct ibv_wc wc;
+  int wcs;
   unsigned int i;
   int err;
 
@@ -650,13 +653,13 @@ server_ibrdma (void)
   memset (&sge, '\0', sizeof (sge));
   memset (&recv_wr, '\0', sizeof (recv_wr));
 
-  sge.addr = (uint64_t)ibdata->buf;
+  sge.addr = (uint64_t)ibdata.buf;
   sge.length = 1;
-  sge.lkey = ibdata->ibv_mr->lkey;
+  sge.lkey = ibdata.ibv_mr->lkey;
 	
   recv_wr.wr_id = RECEIVE_WR_ID;
   recv_wr.next = NULL;
-  recv_wr.sg_list = &ibv_sge;
+  recv_wr.sg_list = &sge;
   recv_wr.num_sge = 1;
   
   if ((err = ibv_post_recv (ibdata.ibv_qp, &recv_wr, &bad_wr)))
@@ -665,8 +668,8 @@ server_ibrdma (void)
       exit (1);
     }
   
-  server_remote_address.address = ibdata.buf;
-  server_remote_address.rkey = ibdata.mr->rkey;
+  server_remote_address.address = (unsigned long long)ibdata.buf;
+  server_remote_address.rkey = ibdata.ibv_mr->rkey;
 
   if (verbose)
     {
@@ -696,50 +699,41 @@ server_ibrdma (void)
   
   /* B/c this is RDMA server has nothing to do, just sit and wait for client to finish*/
 
-  while (blocks_received < blocks_to_receive)
+  memset (&wc, '\0', sizeof (wc));
+
+  do {
+    if ((wcs = ibv_poll_cq (ibdata.ibv_cq, 1, &wc)) < 0)
+      {
+	fprintf (stderr, "ibv_poll_cq failed\n");
+	exit (1);
+      }
+    
+    /* We aren't expecting anything soon, so don't spin-wait */
+    usleep (100);
+  } while (!wcs);
+      
+  if (wcs != 1)
     {
-      struct ibv_wc wc;
-      int wcs;
-      
-      memset (&wc, '\0', sizeof (wc));
-
-      do {
-	if ((wcs = ibv_poll_cq (ibdata.ibv_cq, 1, &wc)) < 0)
-	  {
-	    fprintf (stderr, "ibv_poll_cq failed\n");
-	    exit (1);
-	  }
-
-	/* We aren't expecting anything soon, so don't spin-wait */
-	usleep (100);
-      } while (!wcs);
-      
-      if (wcs != 1)
-	{
-	  fprintf (stderr, "Unexpected wcs count %d\n");
-	  exit (1);
-	}
-	
-      if (wc.status != IBV_WC_SUCCESS)
-	{
-	  fprintf (stderr, "Bad wc status %u\n", wc.status);
-	  if (verbose > 1)
-	    qp_info (ibdata.ibv_qp, "Server QP info", stderr);
-	  exit (1);
-	}
-	
-      if (wc.opcode != IBV_WC_RECV)
-	{
-	  fprintf (stderr,
-		   "Unexpected wc opcode %u, expected %u\n",
-		   wc.opcode, IBV_WC_RECV);
-	  exit (1);
-	}
-	
-      blocks_received++;
-	
+      fprintf (stderr, "Unexpected wcs count %d\n");
+      exit (1);
     }
-
+	
+  if (wc.status != IBV_WC_SUCCESS)
+    {
+      fprintf (stderr, "Bad wc status %u\n", wc.status);
+      if (verbose > 1)
+	qp_info (ibdata.ibv_qp, "Server QP info", stderr);
+      exit (1);
+    }
+  
+  if (wc.opcode != IBV_WC_RECV)
+    {
+      fprintf (stderr,
+	       "Unexpected wc opcode %u, expected %u\n",
+	       wc.opcode, IBV_WC_RECV);
+      exit (1);
+    }
+	
   /* Check data at very end to make sure it looks good */
   if (check_data_correct (ibdata.buf + sizeof (unsigned int),
 			  ibdata.bufsize - sizeof (unsigned int)))
