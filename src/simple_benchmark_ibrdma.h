@@ -24,11 +24,11 @@
  *
  */
 
-#ifndef _SIMPLE_BENCHMARK_RDMARC_H
-#define _SIMPLE_BENCHMARK_RDMARC_H
+#ifndef _SIMPLE_BENCHMARK_IBRDMA_H
+#define _SIMPLE_BENCHMARK_IBRDMA_H
 
-void client_rdmarc (void);
+void client_ibrdma (void);
 
-void server_rdmarc (void);
+void server_ibrdma (void);
 
-#endif /* _SIMPLE_BENCHMARK_RDMARC_H */
+#endif /* _SIMPLE_BENCHMARK_IBRDMA_H */

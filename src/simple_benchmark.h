@@ -34,14 +34,15 @@
 #define UDP_ARGVAL                   'U'
 #define UDPSENDACK_ARGVAL            129
 #define IBRC_ARGVAL                  130
+#define IBRDMA_ARGVAL                131
 #define HOST_ARGVAL                  'H'
 #define BLOCKSIZE_ARGVAL             'b'
 #define TRANSFERSIZE_ARGVAL          't'
 #define RETRANSMISSIONTIMEOUT_ARGVAL 'r'
 #define SESSIONTIMEOUT_ARGVAL        's'
-#define VERIFYDATA_ARGVAL            131
+#define VERIFYDATA_ARGVAL            132
 #define PORT_ARGVAL                  'p'
-#define MEMALIGN_ARGVAL              132
+#define MEMALIGN_ARGVAL              133
 #define VERBOSE_ARGVAL               'v'
 #define HELP_ARGVAL                  'h'
 
@@ -78,7 +79,7 @@ typedef enum {
   BENCHMARK_TEST_TYPE_UDPSENDACK,
   BENCHMARK_TEST_TYPE_IBRC,
   BENCHMARK_TEST_TYPE_IBUD,
-  BENCHMARK_TEST_TYPE_RDMARC,
+  BENCHMARK_TEST_TYPE_IBRDMA,
 } benchmark_test_type_t;
 
 #endif /* _SIMPLE_BENCHMARK_H */

@@ -46,7 +46,7 @@
 
 #include "simple_benchmark.h"
 #include "simple_benchmark_common.h"
-#include "simple_benchmark_rdmarc.h"
+#include "simple_benchmark_ibrdma.h"
 
 extern benchmark_test_type_t benchmark_test_type;
 extern unsigned int sessiontimeout;
@@ -82,20 +82,17 @@ struct server_ibdata {
 
   uint8_t            *buf;
   size_t             bufsize;
-
-  struct ibv_sge     ibv_sge;
-  struct ibv_recv_wr ibv_recv_wr;
 };
 
 struct server_remote_address {
-  unsigned int       rkey;
   unsigned long long address;
+  unsigned int       rkey;
 };
 
 #define RDMA_TIMEOUT  2000
 
-#define MAX_SEND_WR_DEFAULT  300
-#define MAX_RECV_WR_DEFAULT  600
+#define MAX_SEND_WR_DEFAULT  100
+#define MAX_RECV_WR_DEFAULT  100
 #define MAX_SEND_SGE_DEFAULT 1
 #define MAX_RECV_SGE_DEFAULT 1
 
@@ -145,7 +142,7 @@ _cm_event (struct rdma_event_channel *cm_event_channel,
 }
 
 void
-client_rdmarc (void)
+client_ibrdma (void)
 {
   struct client_ibdata ibdata;
   struct sockaddr_in serveraddr;
@@ -522,35 +519,8 @@ _millisecond_timeval_diff (struct timeval *start, struct timeval *end)
   return (t / MICROSECONDS_IN_MILLISECOND);
 }
 
-static void
-_server_post_recv (struct server_ibdata *ibdata)
-{
-  struct ibv_recv_wr *bad_wr;
-  int err;
-
-  assert (ibdata);
-
-  memset (&ibdata->ibv_sge, '\0', sizeof (ibdata->ibv_sge));
-  memset (&ibdata->ibv_recv_wr, '\0', sizeof (ibdata->ibv_recv_wr));
-
-  ibdata->ibv_sge.addr = (uint64_t)ibdata->buf;
-  ibdata->ibv_sge.length = ibdata->bufsize;
-  ibdata->ibv_sge.lkey = ibdata->ibv_mr->lkey;
-	
-  ibdata->ibv_recv_wr.wr_id = RECEIVE_WR_ID;
-  ibdata->ibv_recv_wr.next = NULL;
-  ibdata->ibv_recv_wr.sg_list = &ibdata->ibv_sge;
-  ibdata->ibv_recv_wr.num_sge = 1;
-  
-  if ((err = ibv_post_recv (ibdata->ibv_qp, &ibdata->ibv_recv_wr, &bad_wr)))
-    {
-      fprintf (stderr, "ibv_post_recv failed: %s\n", strerror (err));
-      exit (1);
-    }
-}
-
 void
-server_rdmarc (void)
+server_ibrdma (void)
 {
   struct server_ibdata ibdata;
   struct sockaddr_in serveraddr;
@@ -558,6 +528,10 @@ server_rdmarc (void)
   unsigned int blocks_received = 0;
   unsigned int blocks_to_receive = 0;
   struct ibv_qp_init_attr qp_init_attr;
+  struct server_remote_address server_remote_address;
+  struct ibv_sge sge;
+  struct ibv_recv_wr recv_wr;
+  struct ibv_recv_wr *bad_wr;
   unsigned int i;
   int err;
 
@@ -671,13 +645,41 @@ server_rdmarc (void)
   if (verbose > 1)
     qp_info (ibdata.ibv_qp, "Server pre-accept QP info", stdout);
 
-  for (i = 0; i < MAX_RECV_WR_DEFAULT; i++)
-    _server_post_recv (&ibdata);
-    
+  /* Single recv WR is for when the client tells the server it is done */
+
+  memset (&sge, '\0', sizeof (sge));
+  memset (&recv_wr, '\0', sizeof (recv_wr));
+
+  sge.addr = (uint64_t)ibdata->buf;
+  sge.length = 1;
+  sge.lkey = ibdata->ibv_mr->lkey;
+	
+  recv_wr.wr_id = RECEIVE_WR_ID;
+  recv_wr.next = NULL;
+  recv_wr.sg_list = &ibv_sge;
+  recv_wr.num_sge = 1;
+  
+  if ((err = ibv_post_recv (ibdata.ibv_qp, &recv_wr, &bad_wr)))
+    {
+      fprintf (stderr, "ibv_post_recv failed: %s\n", strerror (err));
+      exit (1);
+    }
+  
+  server_remote_address.address = ibdata.buf;
+  server_remote_address.rkey = ibdata.mr->rkey;
+
+  if (verbose)
+    {
+      printf ("Server address: %p\n", server_remote_address.address);
+      printf ("Server rkey: %u\n", server_remote_address.rkey);
+    }
+
   ibdata.cm_conn_param.responder_resources = RESPONDER_RESOURCES_DEFAULT;
   ibdata.cm_conn_param.initiator_depth = INITIATOR_DEPTH_DEFAULT;
   ibdata.cm_conn_param.retry_count = RETRY_COUNT_DEFAULT;
   ibdata.cm_conn_param.rnr_retry_count = RNR_RETRY_COUNT_DEFAULT;
+  ibdata.cm_conn_param.private_data = &server_remote_address;
+  ibdata.cm_conn_param.private_data_len = sizeof (server_remote_address);
   
   if (rdma_accept (ibdata.cm_connected_id, &ibdata.cm_conn_param) < 0)
     {
@@ -692,36 +694,24 @@ server_rdmarc (void)
 
   printf ("Accepted connection\n");
   
+  /* B/c this is RDMA server has nothing to do, just sit and wait for client to finish*/
+
   while (blocks_received < blocks_to_receive)
     {
-      struct timeval spinstart;
-      struct timeval spinend;
       struct ibv_wc wc;
       int wcs;
       
       memset (&wc, '\0', sizeof (wc));
 
-      gettimeofday (&spinstart, NULL);
-      
       do {
-	unsigned long t;
-
 	if ((wcs = ibv_poll_cq (ibdata.ibv_cq, 1, &wc)) < 0)
 	  {
 	    fprintf (stderr, "ibv_poll_cq failed\n");
 	    exit (1);
 	  }
-	
-	gettimeofday (&spinend, NULL);
-	
-	t = _millisecond_timeval_diff (&spinstart, &spinend);
-	if (t > sessiontimeout)
-	  {
-	    fprintf (stderr, "Server timeout\n");
-	    if (verbose > 1)
-	      qp_info (ibdata.ibv_qp, "Server QP info", stderr);
-	    goto breakout;
-	  }
+
+	/* We aren't expecting anything soon, so don't spin-wait */
+	usleep (100);
       } while (!wcs);
       
       if (wcs != 1)
@@ -748,29 +738,12 @@ server_rdmarc (void)
 	
       blocks_received++;
 	
-      if (verbose > 1)
-	printf ("Received block %u (of %u) of size %u (seq = %u)\n",
-		blocks_received,
-		blocks_to_receive,
-		ibdata.bufsize,
-		*(unsigned int *)ibdata.buf);
-      
-      if (check_data_correct (ibdata.buf + sizeof (unsigned int),
-			      ibdata.bufsize - sizeof (unsigned int)))
-	printf ("Block %u has invalid data\n", blocks_received);
-
-      /* put back WR that was taken out */
-      _server_post_recv (&ibdata);
     }
 
- breakout:
-
-  printf ("Received %u blocks, each %llu bytes\n",
-          blocks_received,
-          ibdata.bufsize);
-  
-  printf ("Total received %llu bytes\n",
-          (uint64_t)blocks_received * ibdata.bufsize);
+  /* Check data at very end to make sure it looks good */
+  if (check_data_correct (ibdata.buf + sizeof (unsigned int),
+			  ibdata.bufsize - sizeof (unsigned int)))
+    printf ("Block has invalid data\n");
 
   if (rdma_ack_cm_event (cm_connect_event) < 0)
     {

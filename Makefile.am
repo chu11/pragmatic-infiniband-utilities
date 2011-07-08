@@ -69,8 +69,8 @@ src_simple_benchmark_SOURCES = src/simple_benchmark.c \
 				src/simple_benchmark_udp.c \
 				src/simple_benchmark_ibrc.c \
 				src/simple_benchmark_ibud.c \
-				src/simple_benchmark_rdmarc.c
-src_simple_benchmark_CFLAGS = -DOSM_VENDOR_INTF_OPENIB -D_GNU_SOURCE -O2
+				src/simple_benchmark_ibrdma.c
+src_simple_benchmark_CFLAGS = -DOSM_VENDOR_INTF_OPENIB
 src_simple_benchmark_LDFLAGS = -libverbs
 
 EXTRA_DIST = \

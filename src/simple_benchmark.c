@@ -37,7 +37,7 @@
 #include "simple_benchmark_udp.h"
 #include "simple_benchmark_ibrc.h"
 #include "simple_benchmark_ibud.h"
-#include "simple_benchmark_rdmarc.h"
+#include "simple_benchmark_ibrdma.h"
 
 /* Notes:
  *
@@ -84,6 +84,7 @@ usage (const char *progname)
 	   "--udp        basic UDP streaming, no reliability handled\n"
 	   "--udpsendack basic UDP send/ack data transfer\n"
 	   "--ibrc       basic IB RC streaming\n"
+	   "--ibrdma     basic IB RDMA streaming\n"
 	   "\n"
 	   "Options:\n"
 	   " --host                   specify host to send to, required for client side\n"
@@ -118,6 +119,7 @@ main (int argc, char *argv[])
       {"udp", 0, 0, UDP_ARGVAL},
       {"udpsendack", 0, 0, UDPSENDACK_ARGVAL},
       {"ibrc", 0, 0, IBRC_ARGVAL},
+      {"ibrdma", 0, 0, IBRDMA_ARGVAL},
       {"host", 1, NULL, HOST_ARGVAL},
       {"blocksize", 1, NULL, BLOCKSIZE_ARGVAL},
       {"transfersize", 1, NULL, TRANSFERSIZE_ARGVAL},
@@ -158,6 +160,9 @@ main (int argc, char *argv[])
 	  break;
 	case IBRC_ARGVAL:
 	  benchmark_test_type = BENCHMARK_TEST_TYPE_IBRC;
+	  break;
+	case IBRDMA_ARGVAL:
+	  benchmark_test_type = BENCHMARK_TEST_TYPE_IBRDMA;
 	  break;
 	case HOST_ARGVAL:
 	  if (!(host = strdup (optarg)))
@@ -296,11 +301,11 @@ main (int argc, char *argv[])
       else
 	server_ibud ();
       break;
-    case BENCHMARK_TEST_TYPE_RDMARC:
+    case BENCHMARK_TEST_TYPE_IBRDMA:
       if (benchmark_run_type == BENCHMARK_RUN_TYPE_CLIENT)
-	client_rdmarc ();
+	client_ibrdma ();
       else
-	server_rdmarc ();
+	server_ibrdma ();
       break;
       break;
     default:
